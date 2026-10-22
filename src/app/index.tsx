@@ -1,98 +1,215 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+import { Button, Card, ScreenContainer } from '@/components/ui';
+import { BottomTabInset, Radii, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 export default function HomeScreen() {
+  const theme = useTheme();
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Dispatcher Setup
+    <ScreenContainer
+      scrollable
+      contentContainerStyle={[
+        styles.container,
+        { paddingBottom: BottomTabInset + Spacing.xl },
+      ]}>
+      <View style={styles.content}>
+        {/* Brand & Tagline */}
+        <View style={styles.brandSection}>
+          <View style={styles.brandRow}>
+            <View
+              style={[
+                styles.brandBadge,
+                { backgroundColor: theme.surfaceSecondary },
+              ]}>
+              <ThemedText type="label" themeColor="textSecondary" style={styles.brandBadgeText}>
+                DISPATCHER
+              </ThemedText>
+            </View>
+          </View>
+
+          <ThemedText type="hero" style={styles.headline}>
+            Keep every job and worker in sync.
           </ThemedText>
-        </ThemedView>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+          <ThemedText type="body" themeColor="textSecondary" style={styles.supportingCopy}>
+            A simpler way to coordinate your field team.
+          </ThemedText>
+        </View>
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
+        {/* Restrained, Neutral Status Card */}
+        <Card variant="surface" style={styles.setupCard}>
+          {/* Simple visual detail using native components */}
+          <View style={styles.visualRow}>
+            <View
+              style={[
+                styles.iconTile,
+                { backgroundColor: theme.surfaceSecondary },
+              ]}>
+              <View style={styles.gridRow}>
+                <View
+                  style={[
+                    styles.gridCell,
+                    { backgroundColor: theme.primary },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.gridCell,
+                    { backgroundColor: theme.borderStrong },
+                  ]}
+                />
+              </View>
+              <View style={styles.gridRow}>
+                <View
+                  style={[
+                    styles.gridCell,
+                    { backgroundColor: theme.borderStrong },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.gridCell,
+                    { backgroundColor: theme.borderStrong },
+                  ]}
+                />
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.statusPill,
+                {
+                  backgroundColor: theme.surfaceSecondary,
+                  borderColor: theme.border,
+                },
+              ]}>
+              <View style={styles.statusDot} />
+              <ThemedText type="label" themeColor="textSecondary" style={styles.statusPillText}>
+                READY
+              </ThemedText>
+            </View>
+          </View>
+
+          <View style={styles.cardContent}>
+            <ThemedText type="headline" style={styles.cardHeading}>
+              Your workspace is ready to be set up.
+            </ThemedText>
+            <ThemedText type="caption" themeColor="textSecondary" style={styles.cardBody}>
+              Configure your dispatch preferences, invite field workers, and schedule your incoming jobs.
+            </ThemedText>
+          </View>
+        </Card>
+
+        {/* Obvious Primary Action */}
+        <View style={styles.actionContainer}>
+          <Button
+            label="Set Up Workspace"
+            variant="primary"
+            size="md"
+            fullWidth
           />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+        </View>
+      </View>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    justifyContent: 'center',
+    paddingTop: Spacing.lg,
+  },
+  content: {
+    width: '100%',
+    gap: Spacing.xl,
+  },
+  brandSection: {
+    gap: Spacing.sm,
+  },
+  brandRow: {
     flexDirection: 'row',
   },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
+  brandBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xxs,
+    borderRadius: Radii.xs,
   },
-  heroSection: {
+  brandBadgeText: {
+    letterSpacing: 0.8,
+  },
+  headline: {
+    fontSize: 26,
+    lineHeight: 32,
+    fontWeight: '700',
+  },
+  supportingCopy: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  setupCard: {
+    gap: Spacing.base,
+    padding: Spacing.lg,
+  },
+  visualRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  iconTile: {
+    width: 36,
+    height: 36,
+    borderRadius: Radii.sm,
+    padding: 6,
     justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+    alignItems: 'center',
+    gap: 3,
   },
-  title: {
-    textAlign: 'center',
+  gridRow: {
+    flexDirection: 'row',
+    gap: 3,
   },
-  code: {
-    textTransform: 'uppercase',
+  gridCell: {
+    width: 10,
+    height: 10,
+    borderRadius: 2,
   },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xxs,
+    borderRadius: Radii.pill,
+    borderWidth: 1,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#15803D',
+  },
+  statusPillText: {
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 0.5,
+  },
+  cardContent: {
+    gap: Spacing.xs,
+  },
+  cardHeading: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '600',
+  },
+  cardBody: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  actionContainer: {
+    width: '100%',
+    paddingTop: Spacing.xs,
   },
 });

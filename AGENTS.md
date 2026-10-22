@@ -1,3 +1,58 @@
+# Dispatcher Project Rules
+
+## Product
+Dispatcher is a mobile field-service dispatch application for small businesses. Owners create and assign jobs, and workers accept and complete them.
+
+## Stack
+- React Native
+- Expo
+- TypeScript
+- Expo Router
+- Supabase and PostgreSQL in later phases
+
+## Job lifecycle
+- unassigned
+- assigned
+- accepted
+- on_the_way
+- arrived
+- in_progress
+- completed
+- cancelled
+
+## Design
+- Minimal professional B2B interface
+- Black primary actions
+- White and off-white backgrounds
+- Neutral text and borders
+- Soft status colors
+- Large touch targets
+- One obvious primary action per screen
+
+## Engineering
+- Inspect existing code before editing.
+- Keep changes small and incremental.
+- Reuse components.
+- Keep UI, business logic, and backend access separated.
+- Use TypeScript correctly.
+- Preserve the current Expo Router architecture.
+- Never place service-role keys or other server secrets in mobile code.
+- Use secure Supabase Row Level Security when the backend is introduced.
+- Document database schema changes through migrations.
+- Never claim a test passed unless it actually ran.
+- Report which files changed and what checks were executed.
+
+## AI workflow
+- Gemini should implement routine tasks one at a time.
+- Do not generate the entire application in one prompt.
+- Do not add dependencies unless needed for the current task.
+- Do not build product features during Phase 1.
+- Run the relevant checks after every change.
+
+---
+
+# Expo & React Native Guidelines
+
 This is an Expo/React Native mobile application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
 
 ## Expo has changed — do not trust your training data
