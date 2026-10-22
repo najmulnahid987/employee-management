@@ -1,7 +1,15 @@
 # Dispatcher Project Rules
 
+## Source of Truth
+The authoritative, frozen specification for this project is [`docs/product-specification.md`](docs/product-specification.md). All application screens, lifecycle states, roles, permissions, data models, and scope boundaries must strictly align with this document. Do not create duplicate source-of-truth documents.
+
 ## Product
-Dispatcher is a mobile field-service dispatch application for small businesses. Owners create and assign jobs, and workers accept and complete them.
+Dispatcher is a mobile-first dispatch and job-execution system for small local service businesses. Owners create, assign, and track jobs; workers accept and complete jobs in the field; customers track their service visit via a secure web tracking link.
+
+## Roles & Interfaces
+- **Owner (Mobile App):** Manages the business, workers, jobs, assignments, cancellations, and operational visibility across 5 root tabs (`Dashboard`, `Jobs`, `Workers`, `Live Map`, `Profile`).
+- **Worker (Mobile App):** Field technician viewing assigned work and executing permitted sequential status transitions across 3 root tabs (`Today`, `Jobs`, `Profile`).
+- **Customer (Web Browser):** Service recipient viewing live status updates via a non-guessable, tokenized tracking link without requiring an account or mobile app.
 
 ## Stack
 - React Native
@@ -10,15 +18,71 @@ Dispatcher is a mobile field-service dispatch application for small businesses. 
 - Expo Router
 - Supabase and PostgreSQL in later phases
 
-## Job lifecycle
-- unassigned
-- assigned
-- accepted
-- on_the_way
-- arrived
-- in_progress
-- completed
-- cancelled
+## Frozen Job Lifecycle (8 Statuses)
+- `unassigned`
+- `assigned`
+- `accepted`
+- `on_the_way`
+- `arrived`
+- `in_progress`
+- `completed` (terminal)
+- `cancelled` (terminal)
+
+### Lifecycle Rules & Transitions
+- **Allowed transitions:**
+  - `unassigned` → `assigned`: Owner assigns a valid worker from the same business.
+  - `assigned` → `accepted`: Assigned worker accepts assignment.
+  - `assigned` → `unassigned`: Assigned worker declines before acceptance, OR Owner unassigns the job.
+  - `accepted` → `on_the_way`: Assigned worker starts travelling.
+  - `on_the_way` → `arrived`: Assigned worker records arrival.
+  - `arrived` → `in_progress`: Assigned worker starts work.
+  - `in_progress` → `completed`: Assigned worker completes work.
+  - Nonterminal (`unassigned`, `assigned`, `accepted`, `on_the_way`, `arrived`, `in_progress`) → `cancelled`: Owner cancels with a mandatory cancellation reason.
+- **Terminal statuses:** `completed` and `cancelled` are terminal in the MVP; reopening terminal jobs is not supported.
+- **Declining is an event:** Declining an assignment transitions `assigned` → `unassigned`; do not invent an additional job status.
+- **Transition validation:** Invalid transitions must be rejected. Each successful status change produces an append-only, server-recorded job event (`actor`, `previous_status`, `new_status`, `timestamp`, `metadata`).
+
+## Frozen Mobile Screens (16 Screens + Customer Web Page)
+1. Sign In (Shared Auth)
+2. Owner Business Setup (Onboarding)
+3. Worker Invitation / Join (Onboarding)
+4. Owner Dashboard (Owner Tab Root 1)
+5. Owner Jobs (Owner Tab Root 2)
+6. Create Job (Modal / Stack)
+7. Owner Job Details (Stack)
+8. Assign Worker (Modal / Stack)
+9. Workers (Owner Tab Root 3)
+10. Worker Details (Stack)
+11. Live Map (Owner Tab Root 4)
+12. Owner Profile / Business Settings (Owner Tab Root 5)
+13. Worker Today (Worker Tab Root 1)
+14. Worker Jobs (Worker Tab Root 2)
+15. Worker Job Details (Stack)
+16. Worker Profile (Worker Tab Root 3)
+*Customer Tracking Web Page is documented separately as an unauthenticated web surface.*
+
+## Explicit MVP Scope Boundaries
+- **In-Scope:** Job creation, single-worker assignment, execution, status visibility, append-only history, customer link-based tracking, native communication launchers (call/map), basic billing readiness fields.
+- **Strictly Excluded (No Scope Creep):** AI scheduling, payroll/wages, invoicing/payments, inventory/parts, CRM, automated route optimization, native customer mobile app, multi-worker assignment, multi-business tenancy.
+- Future-phase features mentioned for readiness are not considered implemented.
+
+## Core Engineering & Architecture Rules
+- **No Scope Creep:** Strictly build only features documented in the frozen MVP specification.
+- **Strict Business Tenancy:** Every job belongs to exactly one business. Business data must be isolated between businesses.
+- **Single Worker Assignment:** A job has at most one currently assigned worker, who must belong to the same business.
+- **No Fake Business Data:** Never invent mock datasets that violate relational integrity, single-business tenancy, or lifecycle transitions.
+- **No Unauthorized Status Changes:** Reject invalid transitions. Server-side validation and RLS enforcement are mandatory; client checks alone are insufficient.
+- **No Insecure Secrets:** Never include service-role keys, database passwords, or server secrets in mobile code or repo.
+- **No Undocumented Tables:** Never create database tables, columns, or relations without documentation in the product specification.
+- **No Unreviewed Schema Changes:** All database schema changes must be documented and executed through reviewed migrations in `supabase/migrations/`.
+- **Append-Only History:** Status history is strictly append-only from the application perspective.
+- **Inspect existing code before editing.**
+- **Keep changes small and incremental.** Reuse components.
+- **Keep UI, business logic, and backend access separated.**
+- **Use TypeScript correctly.**
+- **Preserve the current Expo Router architecture.**
+- **Never claim a test passed unless it actually ran.**
+- **Report which files changed and what checks were executed.**
 
 ## Design
 - Minimal professional B2B interface
@@ -28,19 +92,6 @@ Dispatcher is a mobile field-service dispatch application for small businesses. 
 - Soft status colors
 - Large touch targets
 - One obvious primary action per screen
-
-## Engineering
-- Inspect existing code before editing.
-- Keep changes small and incremental.
-- Reuse components.
-- Keep UI, business logic, and backend access separated.
-- Use TypeScript correctly.
-- Preserve the current Expo Router architecture.
-- Never place service-role keys or other server secrets in mobile code.
-- Use secure Supabase Row Level Security when the backend is introduced.
-- Document database schema changes through migrations.
-- Never claim a test passed unless it actually ran.
-- Report which files changed and what checks were executed.
 
 ## AI workflow
 - Gemini should implement routine tasks one at a time.
