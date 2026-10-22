@@ -100,6 +100,91 @@ Dispatcher is a mobile-first dispatch and job-execution system for small local s
 - Do not build product features during Phase 1.
 - Run the relevant checks after every change.
 
+## M4 Security & Authorization Architecture
+
+### 1. Role-Based Table Permissions
+- **`businesses`**:
+  - `anon`: Revoked (no SELECT, INSERT, UPDATE, DELETE).
+  - `owner`: SELECT own business (`id = app_auth.current_business_id()`); UPDATE non-relational business metadata (`name`, `phone`, `address`). INSERT/DELETE denied (creation via RPC).
+  - `worker`: SELECT own business; INSERT, UPDATE, DELETE denied.
+  - `service_role`: Full bypass.
+- **`profiles`**:
+  - `anon`: Revoked.
+  - `owner`: SELECT own profile and active/inactive workers in same business (`business_id = app_auth.current_business_id()`); UPDATE own profile and worker `is_active` status (`role` and `business_id` locked). INSERT/DELETE denied.
+  - `worker`: SELECT own profile and business owner profile for team contact; UPDATE own contact info (`full_name`, `phone`, `avatar_url`; `role`, `business_id`, `is_active` locked). INSERT/DELETE denied.
+  - `service_role`: Full bypass.
+- **`jobs`**:
+  - `anon`: Revoked (no direct table access; customer tracking via RPC `get_customer_tracking_job`).
+  - `owner`: SELECT all jobs in own business; INSERT unassigned jobs in own business (`status = 'unassigned'`, `worker_id IS NULL`); UPDATE jobs in own business (non-terminal); DELETE revoked.
+  - `worker`: SELECT assigned jobs only (`worker_id = auth.uid()`); UPDATE assigned jobs only for permitted sequential status transitions or assignment decline (`assigned` -> `unassigned`). Customer/address/schedule fields locked. INSERT/DELETE denied.
+  - `service_role`: Full bypass.
+- **`job_events`**:
+  - `anon`: Revoked.
+  - `owner`: SELECT events in own business; INSERT, UPDATE, DELETE revoked.
+  - `worker`: SELECT events for assigned jobs; INSERT, UPDATE, DELETE revoked.
+  - `service_role`: Full bypass (client writes revoked; trigger-generated only).
+- **`locations`**:
+  - `anon`: Revoked.
+  - `owner`: SELECT locations of workers in own business; INSERT, UPDATE, DELETE revoked.
+  - `worker`: SELECT own locations (`worker_id = auth.uid()`); INSERT own locations for assigned active jobs (or ambient with `job_id IS NULL`); UPDATE, DELETE revoked.
+  - `service_role`: Full bypass.
+- **`subscriptions`**:
+  - `anon`: Revoked.
+  - `owner`: SELECT own business subscription; INSERT, UPDATE, DELETE revoked.
+  - `worker`: Denied (no access).
+  - `service_role`: Full bypass (managed exclusively by server-side webhooks).
+
+### 2. Business Isolation & Trusted Identity
+- **Trusted Identity:** `auth.uid()` from verified JWT claims. Never trust client-provided `business_id`, `role`, or `actor_id`.
+- **Private Helper Schema (`app_auth`):** Non-recursive `SECURITY DEFINER` functions (`current_business_id()`, `current_user_role()`, `is_business_owner()`, `is_active_worker()`) with `SET search_path = ''`.
+- **Relational Integrity Guarantees:** Composite unique key `profiles(id, business_id)` and composite foreign key `jobs(worker_id, business_id) REFERENCES profiles(id, business_id)` guarantee workers can never be assigned to jobs outside their business.
+
+### 3. Protected Job Assignment & Lifecycle Operations
+- **Lifecycle Transition Trigger:** `trg_jobs_validate_lifecycle_transition` enforces the frozen 8 statuses:
+  `unassigned` -> `assigned` -> `accepted` -> `on_the_way` -> `arrived` -> `in_progress` -> `completed` (terminal) | `cancelled` (terminal).
+- **Enforcement Rules:** Workers can only advance sequential statuses or decline (`assigned` -> `unassigned`). Only Owners can assign workers (`unassigned` -> `assigned`, reassignment, unassign) or cancel jobs (with mandatory `cancellation_reason`). Terminal statuses (`completed`, `cancelled`) are immutable and cannot be reopened.
+- **Transactional RPCs:** `assign_job_worker`, `cancel_job`, `advance_job_status`, `decline_job_assignment`.
+
+### 4. Audit-Event Generation Strategy
+- **Trigger-Driven Immutability:** `handle_job_event_logging()` runs `AFTER INSERT OR UPDATE ON jobs` as `SECURITY DEFINER` with empty `search_path`.
+- Direct client `INSERT`, `UPDATE`, `DELETE` on `job_events` are revoked; `trg_prevent_job_events_mutation` blocks mutations.
+- Automatically captures actor ID, role (`owner`, `worker`, `system`), event type, previous/new status, and metadata atomically within the transaction.
+
+### 5. Location-Write Restrictions
+- Workers can only insert locations where `worker_id = auth.uid()` and `job_id` references an active job assigned to them.
+- Direct `UPDATE` and `DELETE` on `locations` are revoked; `trg_prevent_locations_mutation` prevents modification of historical breadcrumbs.
+
+### 6. Customer Tracking Security & Token Design
+- Raw tables have zero public SELECT access (`REVOKE ALL ON jobs FROM anon`).
+- Tracking token is an opaque 128-bit UUIDv4 (`gen_random_uuid()`) with 122 bits of entropy; never guessable from job ID.
+- Access via `get_customer_tracking_job(p_tracking_token)` returns an allowlisted JSON payload (status, label, service, business name/phone, worker first name and avatar).
+- Withholds customer phone, internal notes, gate codes, cancellation reason, worker contact details, and location history. Returns generic `NULL` on invalid tokens (anti-enumeration).
+
+### 7. Server-Side Credential Hygiene
+- **Service-Role Key (`SUPABASE_SERVICE_ROLE_KEY`):** Must NEVER be included in the mobile app, public tracking frontend, or client `.env` files. Bypasses all RLS.
+- **Database Passwords / Connection Strings:** Strictly server-side for migrations/backend.
+- **Stripe Secret / Webhook Keys:** Strictly server-side in Edge Functions / billing backends.
+- **Client Safe Keys:** Mobile app and tracking frontend strictly use `EXPO_PUBLIC_SUPABASE_ANON_KEY`.
+
+### 8. Database Security Test Execution
+- Requires Supabase CLI and local Docker/Podman:
+  ```bash
+  npx supabase start
+  npx supabase test db
+  ```
+- 8 test files in `supabase/tests/` covering 71 pgTAP test assertions.
+
+### 9. Test Verification Status
+- **Static & Syntax Validation:** All 71 assertions across 8 test suites pass review and align with PostgreSQL 15/16 and pgTAP specifications.
+- **Live Test Blocker:** Local execution requires Docker Desktop/Podman, which is currently unavailable on the local Windows environment.
+- **Safety Directive:** Tests must NEVER be run against the remote/production project (`liuwoncaagppyezxugtt`).
+- **Production Disclaimer:** Development and static test verification does NOT constitute proof of production security. Live penetration audits and CI verification with Docker are required prior to production launch.
+
+### 10. Phase Limitations & Prerequisites
+- **Auth Phase:** Connect Supabase Auth (`signUp`, `signInWithPassword`) with secure token storage (`expo-secure-store`) and wire worker invitation join tokens.
+- **Customer Tracking Phase:** Implement dedicated customer web frontend and configure CDN reverse-proxy rate limiting (60 req/min/IP).
+- **Billing Phase:** Deploy Supabase Edge Functions with `STRIPE_WEBHOOK_SECRET` to update `subscriptions`.
+
 ---
 
 # Expo & React Native Guidelines
