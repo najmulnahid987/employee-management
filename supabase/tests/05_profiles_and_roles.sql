@@ -4,14 +4,15 @@
 -- =============================================================================
 
 BEGIN;
-SELECT plan(6);
+SELECT plan(12);
 
 -- Fixtures Setup
 INSERT INTO auth.users (id, email) VALUES
     ('a1111111-1111-1111-1111-111111111111', 'owner-a@test.com'),
     ('a2222222-2222-2222-2222-222222222222', 'worker-a1@test.com'),
     ('a3333333-3333-3333-3333-333333333333', 'worker-a2@test.com'),
-    ('b1111111-1111-1111-1111-111111111111', 'owner-b@test.com')
+    ('b1111111-1111-1111-1111-111111111111', 'owner-b@test.com'),
+    ('c1111111-1111-1111-1111-111111111111', 'new-owner@test.com')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.businesses (id, name, phone, address) VALUES
@@ -97,6 +98,74 @@ SELECT throws_ok(
     '42501', -- RLS WITH CHECK policy violation (profiles_owner_worker_update)
     NULL,
     'Owner cannot alter a worker profile business_id'
+);
+
+-- -----------------------------------------------------------------------------
+-- Test 7: Direct client INSERT into profiles is rejected (revoked privilege)
+-- -----------------------------------------------------------------------------
+SELECT throws_ok(
+    $$INSERT INTO public.profiles (id, business_id, full_name, email, role) 
+      VALUES ('c1111111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111', 'Rogue User', 'rogue@test.com', 'owner')$$,
+    '42501', -- permission denied for table profiles
+    NULL,
+    'Direct client INSERT on public.profiles must be rejected'
+);
+
+-- -----------------------------------------------------------------------------
+-- Test 8: Direct client INSERT into businesses is rejected (revoked privilege)
+-- -----------------------------------------------------------------------------
+SELECT throws_ok(
+    $$INSERT INTO public.businesses (id, name, phone) 
+      VALUES ('99999999-9999-9999-9999-999999999999', 'Rogue Corp', '555-0000')$$,
+    '42501', -- permission denied for table businesses
+    NULL,
+    'Direct client INSERT on public.businesses must be rejected'
+);
+
+-- -----------------------------------------------------------------------------
+-- Test 9: An unauthenticated user cannot provision a business
+-- -----------------------------------------------------------------------------
+SET LOCAL ROLE anon;
+SET LOCAL "request.jwt.claims" = '';
+
+SELECT throws_ok(
+    $$SELECT public.provision_business('Unauth Corp', '555-1111')$$,
+    '42501', -- permission denied for function provision_business
+    NULL,
+    'Unauthenticated callers cannot execute provision_business'
+);
+
+-- -----------------------------------------------------------------------------
+-- Test 10: New authenticated user provisions a business and owner profile
+-- -----------------------------------------------------------------------------
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claims" = '{"sub": "c1111111-1111-1111-1111-111111111111", "role": "authenticated"}';
+
+SELECT lives_ok(
+    $$SELECT public.provision_business('Omega Services', '555-9000', '500 Omega Way', 'New Owner')$$,
+    'New authenticated user can provision a business and owner profile'
+);
+
+-- -----------------------------------------------------------------------------
+-- Test 11: Repeated provisioning by the same user is rejected
+-- -----------------------------------------------------------------------------
+SELECT throws_ok(
+    $$SELECT public.provision_business('Omega Duplicate', '555-9001')$$,
+    'P0001', -- user-defined exception: User profile already exists
+    'User profile already exists and cannot provision a new business',
+    'Repeated provisioning by an existing profile must be rejected'
+);
+
+-- -----------------------------------------------------------------------------
+-- Test 12: An authenticated user cannot overwrite another user''s profile
+-- -----------------------------------------------------------------------------
+SELECT throws_ok(
+    $$UPDATE public.profiles
+      SET full_name = 'Hacked Name'
+      WHERE id = 'a1111111-1111-1111-1111-111111111111'$$,
+    '42501', -- RLS WITH CHECK policy violation (profiles_self_update)
+    NULL,
+    'User cannot update or overwrite another user''s profile'
 );
 
 SELECT * FROM finish();

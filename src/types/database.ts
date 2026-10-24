@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -338,7 +338,49 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      provision_business: {
+        Args: {
+          p_name: string
+          p_phone: string
+          p_address?: string | null
+          p_owner_full_name?: string | null
+        }
+        Returns: string
+      }
+      assign_job_worker: {
+        Args: {
+          p_job_id: string
+          p_worker_id?: string | null
+        }
+        Returns: Database["public"]["Tables"]["jobs"]["Row"]
+      }
+      cancel_job: {
+        Args: {
+          p_job_id: string
+          p_cancellation_reason: string
+        }
+        Returns: Database["public"]["Tables"]["jobs"]["Row"]
+      }
+      advance_job_status: {
+        Args: {
+          p_job_id: string
+          p_target_status: string
+        }
+        Returns: Database["public"]["Tables"]["jobs"]["Row"]
+      }
+      decline_job_assignment: {
+        Args: {
+          p_job_id: string
+          p_decline_reason?: string | null
+        }
+        Returns: Database["public"]["Tables"]["jobs"]["Row"]
+      }
+      get_customer_tracking_job: {
+        Args: {
+          p_tracking_token: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

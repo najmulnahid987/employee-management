@@ -1,12 +1,26 @@
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, ScreenContainer } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
+import { useAuth } from '@/hooks/use-auth';
 
 export default function WorkerProfileScreen() {
+  const { user, profile, signOut } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOut();
+      router.replace('/sign-in');
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
   return (
     <ScreenContainer scrollable withPadding>
       <View style={styles.container}>
@@ -19,12 +33,14 @@ export default function WorkerProfileScreen() {
 
         <Card variant="surface" style={styles.card}>
           <ThemedText type="headline">Account Information</ThemedText>
-          <ThemedText type="body">Technician Member</ThemedText>
+          <ThemedText type="body">
+            {profile?.full_name ?? 'Technician Member'}
+          </ThemedText>
           <ThemedText type="caption" themeColor="textSecondary">
             Role: Field Worker
           </ThemedText>
           <ThemedText type="caption" themeColor="textSecondary">
-            Account: worker@business.com
+            Account: {user?.email ?? 'worker@business.com'}
           </ThemedText>
         </Card>
 
@@ -39,7 +55,9 @@ export default function WorkerProfileScreen() {
           label="Sign Out"
           variant="outline"
           fullWidth
-          onPress={() => router.replace('/sign-in')}
+          loading={signingOut}
+          disabled={signingOut}
+          onPress={handleSignOut}
           style={styles.signOutButton}
         />
       </View>

@@ -1,12 +1,26 @@
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, ScreenContainer } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
+import { useAuth } from '@/hooks/use-auth';
 
 export default function OwnerProfileScreen() {
+  const { user, profile, business, signOut } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOut();
+      router.replace('/sign-in');
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
   return (
     <ScreenContainer scrollable withPadding>
       <View style={styles.container}>
@@ -19,12 +33,27 @@ export default function OwnerProfileScreen() {
 
         <Card variant="surface" style={styles.card}>
           <ThemedText type="headline">Business Information</ThemedText>
-          <ThemedText type="body">Acme Service Operations</ThemedText>
+          <ThemedText type="body" style={{ fontWeight: '600' }}>
+            {business?.name ?? 'Business Name'}
+          </ThemedText>
+          {business?.phone ? (
+            <ThemedText type="caption" themeColor="textSecondary">
+              Dispatch Phone: {business.phone}
+            </ThemedText>
+          ) : null}
+          {business?.address ? (
+            <ThemedText type="caption" themeColor="textSecondary">
+              Operating Address: {business.address}
+            </ThemedText>
+          ) : null}
+          <ThemedText type="caption" themeColor="textSecondary">
+            Owner: {profile?.full_name ?? 'Business Owner'}
+          </ThemedText>
           <ThemedText type="caption" themeColor="textSecondary">
             Role: Business Owner
           </ThemedText>
           <ThemedText type="caption" themeColor="textSecondary">
-            Account: owner@business.com
+            Account: {user?.email ?? 'owner@business.com'}
           </ThemedText>
         </Card>
 
@@ -39,7 +68,9 @@ export default function OwnerProfileScreen() {
           label="Sign Out"
           variant="outline"
           fullWidth
-          onPress={() => router.replace('/sign-in')}
+          loading={signingOut}
+          disabled={signingOut}
+          onPress={handleSignOut}
           style={styles.signOutButton}
         />
       </View>
