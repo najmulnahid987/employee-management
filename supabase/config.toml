@@ -386,6 +386,12 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# Public Customer Tracking Edge Function (Milestone 13.4)
+# Disables gateway JWT verification exclusively for the public tracking endpoint.
+# Token authentication and session authorization are strictly validated inside the handler.
+[functions.customer-tracking]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

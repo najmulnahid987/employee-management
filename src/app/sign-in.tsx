@@ -47,10 +47,80 @@ export default function SignInScreen() {
   const passwordInputRef = useRef<TextInput>(null);
   const confirmPasswordInputRef = useRef<TextInput>(null);
 
-  // If already authenticated, show redirecting state while NavigationRouteGuard resolves destination
-  if (session && !authLoading) {
-    return <Loading fullScreen label="Redirecting..." />;
-  }
+  // Temporary development-only Supabase connection diagnostic (M3.5)
+  const [diagLoading, setDiagLoading] = useState(false);
+  const [diagResult, setDiagResult] = useState<{
+    status: number | null;
+    outcome: 'idle' | 'success' | 'permission_denied' | 'error';
+    summary: string;
+    detail: string;
+    latencyMs?: number;
+  }>({
+    status: null,
+    outcome: 'idle',
+    summary: 'Not tested yet',
+    detail: 'Tap "Test Supabase Connection" to test live connectivity.',
+  });
+
+  const runDiagnostic = async () => {
+    setDiagLoading(true);
+    const start = Date.now();
+    try {
+      // 1. Query only businesses.id with limit of 1; never display business data or credentials
+      const { data, error, status } = await supabase
+        .from('businesses')
+        .select('id')
+        .limit(1);
+
+      const latencyMs = Date.now() - start;
+
+      if (error) {
+        if (status === 403 || error.code === '42501') {
+          setDiagResult({
+            status,
+            outcome: 'permission_denied',
+            summary: `HTTP ${status} — Permission Denied (Expected)`,
+            detail:
+              'API is reachable. Query was rejected by PostgreSQL Row Level Security (RLS default-deny baseline for M3).',
+            latencyMs,
+          });
+        } else {
+          setDiagResult({
+            status,
+            outcome: 'error',
+            summary: `HTTP ${status || 'ERR'} — Query Failed`,
+            detail: `${error.message} (Code: ${error.code || 'UNKNOWN'})`,
+            latencyMs,
+          });
+        }
+      } else {
+        // Successful empty result is normal while RLS select policies are not yet configured
+        setDiagResult({
+          status,
+          outcome: 'success',
+          summary: `HTTP ${status} OK — Reachable`,
+          detail: `API reachable. Returned ${data.length} row(s). Empty result is normal under M3 RLS default-deny.`,
+          latencyMs,
+        });
+      }
+    } catch (err: any) {
+      setDiagResult({
+        status: 0,
+        outcome: 'error',
+        summary: 'Network / Config Error',
+        detail: err?.message || 'Failed to reach Supabase API.',
+        latencyMs: Date.now() - start,
+      });
+    } finally {
+      setDiagLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (__DEV__) {
+      runDiagnostic();
+    }
+  }, []);
 
   const switchMode = (newMode: 'signin' | 'signup') => {
     setMode(newMode);
@@ -129,82 +199,10 @@ export default function SignInScreen() {
     }
   };
 
-
-
-  // Temporary development-only Supabase connection diagnostic (M3.5)
-  const [diagLoading, setDiagLoading] = useState(false);
-  const [diagResult, setDiagResult] = useState<{
-    status: number | null;
-    outcome: 'idle' | 'success' | 'permission_denied' | 'error';
-    summary: string;
-    detail: string;
-    latencyMs?: number;
-  }>({
-    status: null,
-    outcome: 'idle',
-    summary: 'Not tested yet',
-    detail: 'Tap "Test Supabase Connection" to test live connectivity.',
-  });
-
-  const runDiagnostic = async () => {
-    setDiagLoading(true);
-    const start = Date.now();
-    try {
-      // 1. Query only businesses.id with limit of 1; never display business data or credentials
-      const { data, error, status } = await supabase
-        .from('businesses')
-        .select('id')
-        .limit(1);
-
-      const latencyMs = Date.now() - start;
-
-      if (error) {
-        if (status === 403 || error.code === '42501') {
-          setDiagResult({
-            status,
-            outcome: 'permission_denied',
-            summary: `HTTP ${status} — Permission Denied (Expected)`,
-            detail:
-              'API is reachable. Query was rejected by PostgreSQL Row Level Security (RLS default-deny baseline for M3).',
-            latencyMs,
-          });
-        } else {
-          setDiagResult({
-            status,
-            outcome: 'error',
-            summary: `HTTP ${status || 'ERR'} — Query Failed`,
-            detail: `${error.message} (Code: ${error.code || 'UNKNOWN'})`,
-            latencyMs,
-          });
-        }
-      } else {
-        // Successful empty result is normal while RLS select policies are not yet configured
-        setDiagResult({
-          status,
-          outcome: 'success',
-          summary: `HTTP ${status} OK — Reachable`,
-          detail: `API reachable. Returned ${data.length} row(s). Empty result is normal under M3 RLS default-deny.`,
-          latencyMs,
-        });
-      }
-    } catch (err: any) {
-      setDiagResult({
-        status: 0,
-        outcome: 'error',
-        summary: 'Network / Config Error',
-        detail: err?.message || 'Failed to reach Supabase API.',
-        latencyMs: Date.now() - start,
-      });
-    } finally {
-      setDiagLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (__DEV__) {
-      runDiagnostic();
-    }
-  }, []);
+  // If already authenticated, show redirecting state while NavigationRouteGuard resolves destination
+  if (session && !authLoading) {
+    return <Loading fullScreen label="Redirecting..." />;
+  }
 
   return (
     <ScreenContainer scrollable withPadding>

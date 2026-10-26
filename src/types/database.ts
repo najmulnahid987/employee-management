@@ -41,6 +41,67 @@ export type Database = {
         }
         Relationships: []
       }
+      customer_tracking_sessions: {
+        Row: {
+          activated_at: string | null
+          business_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          job_id: string
+          revocation_reason: string | null
+          revoked_at: string | null
+          token_hash: string
+          worker_id: string | null
+        }
+        Insert: {
+          activated_at?: string | null
+          business_id: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          job_id: string
+          revocation_reason?: string | null
+          revoked_at?: string | null
+          token_hash: string
+          worker_id?: string | null
+        }
+        Update: {
+          activated_at?: string | null
+          business_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          job_id?: string
+          revocation_reason?: string | null
+          revoked_at?: string | null
+          token_hash?: string
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_tracking_sessions_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_tracking_sessions_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_tracking_sessions_worker_business"
+            columns: ["worker_id", "business_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "business_id"]
+          }
+        ]
+      }
       job_events: {
         Row: {
           actor_id: string | null
@@ -338,6 +399,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_job: {
+        Args: {
+          p_customer_name: string
+          p_customer_phone: string
+          p_service: string
+          p_address: string
+          p_scheduled_at: string
+          p_notes?: string | null
+          p_worker_id?: string | null
+          p_latitude?: number | null
+          p_longitude?: number | null
+        }
+        Returns: Database["public"]["Tables"]["jobs"]["Row"]
+      }
       provision_business: {
         Args: {
           p_name: string
@@ -351,6 +426,7 @@ export type Database = {
         Args: {
           p_job_id: string
           p_worker_id?: string | null
+          p_expected_current_status?: string | null
         }
         Returns: Database["public"]["Tables"]["jobs"]["Row"]
       }
@@ -358,6 +434,7 @@ export type Database = {
         Args: {
           p_job_id: string
           p_cancellation_reason: string
+          p_expected_current_status?: string | null
         }
         Returns: Database["public"]["Tables"]["jobs"]["Row"]
       }
@@ -365,6 +442,7 @@ export type Database = {
         Args: {
           p_job_id: string
           p_target_status: string
+          p_expected_current_status?: string | null
         }
         Returns: Database["public"]["Tables"]["jobs"]["Row"]
       }
@@ -372,12 +450,69 @@ export type Database = {
         Args: {
           p_job_id: string
           p_decline_reason?: string | null
+          p_expected_current_status?: string | null
         }
         Returns: Database["public"]["Tables"]["jobs"]["Row"]
       }
       get_customer_tracking_job: {
         Args: {
           p_tracking_token: string
+        }
+        Returns: Json
+      }
+      record_worker_location: {
+        Args: {
+          p_job_id: string
+          p_latitude: number
+          p_longitude: number
+          p_accuracy?: number | null
+        }
+        Returns: Database["public"]["Tables"]["locations"]["Row"]
+      }
+      get_owner_active_locations: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          accuracy: number | null
+          destination_latitude: number | null
+          destination_longitude: number | null
+          job_address: string
+          job_id: string
+          job_service: string
+          job_status: string
+          location_id: string
+          recorded_at: string
+          worker_avatar_url: string | null
+          worker_id: string
+          worker_latitude: number
+          worker_longitude: number
+          worker_name: string
+        }[]
+      }
+      generate_customer_tracking_session: {
+        Args: {
+          p_job_id: string
+          p_duration_hours?: number
+        }
+        Returns: {
+          created_at: string
+          expires_at: string
+          is_activated: boolean
+          job_id: string
+          raw_token: string
+          session_id: string
+          tracking_url: string
+        }[]
+      }
+      revoke_customer_tracking_session: {
+        Args: {
+          p_job_id: string
+          p_reason?: string
+        }
+        Returns: boolean
+      }
+      get_customer_tracking_session_job: {
+        Args: {
+          p_token: string
         }
         Returns: Json
       }

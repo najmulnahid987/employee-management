@@ -7,7 +7,10 @@ import { useColorScheme } from 'react-native';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AuthRecoveryView } from '@/components/auth-recovery-view';
 import { AuthProvider } from '@/contexts/auth-context';
+import { RealtimeProvider } from '@/contexts/realtime-context';
 import { useAuth } from '@/hooks/use-auth';
+// Register background location task at root module scope
+import '@/lib/background-location-task';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -21,6 +24,11 @@ function NavigationRouteGuard() {
   useEffect(() => {
     // 0. Do not route while session is being restored or actively transitioning
     if (isLoading) return;
+
+    // Public route: customer tracking does not require authentication
+    if (rootSegment === 'track') {
+      return;
+    }
 
     // 1. Missing session: must be on /sign-in
     if (!session) {
@@ -121,6 +129,7 @@ function RootContent() {
         <Stack.Screen name="sign-in" options={{ headerShown: false }} />
         <Stack.Screen name="owner" options={{ headerShown: false }} />
         <Stack.Screen name="worker" options={{ headerShown: false }} />
+        <Stack.Screen name="track" options={{ headerShown: false }} />
       </Stack>
     </>
   );
@@ -132,7 +141,9 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AuthProvider>
-        <RootContent />
+        <RealtimeProvider>
+          <RootContent />
+        </RealtimeProvider>
       </AuthProvider>
     </ThemeProvider>
   );

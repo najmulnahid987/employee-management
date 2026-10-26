@@ -28,8 +28,33 @@ export type AuthResult<T> = AuthSuccessResult<T> | AuthErrorResult;
 export function sanitizeAuthError(error: unknown): string {
   if (!error) return 'An unexpected authentication error occurred.';
 
-  const message = error instanceof Error ? error.message : String(error);
+  let message = '';
+  if (typeof error === 'string') {
+    message = error;
+  } else if (error instanceof Error) {
+    message = error.message;
+  } else if (typeof error === 'object' && error !== null) {
+    const errObj = error as Record<string, unknown>;
+    if (typeof errObj.message === 'string' && errObj.message.trim()) {
+      message = errObj.message;
+    } else if (typeof errObj.error_description === 'string' && errObj.error_description.trim()) {
+      message = errObj.error_description;
+    } else if (typeof errObj.details === 'string' && errObj.details.trim()) {
+      message = errObj.details;
+    } else {
+      try {
+        message = JSON.stringify(error);
+      } catch {
+        message = 'An unexpected server error occurred.';
+      }
+    }
+  } else {
+    message = String(error);
+  }
 
+  if (message.includes('provision_business') || message.includes('PGRST202')) {
+    return 'Database function "provision_business" not found. Please run the migration (20261022223000_rls_security_policies.sql) in your Supabase SQL Editor.';
+  }
   if (message.includes('Invalid login credentials')) {
     return 'Invalid email or password. Please verify your credentials and try again.';
   }

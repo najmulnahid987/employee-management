@@ -32,7 +32,18 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Dispatcher to track your location in the background during active customer visits so dispatch and customers receive arrival updates.",
+          "locationWhenInUsePermission": "Allow Dispatcher to access your location while en route to service jobs.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      "expo-maps"
     ],
     "experiments": {
       "typedRoutes": true,

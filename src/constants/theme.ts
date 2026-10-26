@@ -138,18 +138,12 @@ export const Colors = {
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
+import { JobStatus } from '@/lib/lifecycle';
+
 /**
- * 8-Stage Job Lifecycle as specified in AGENTS.md
+ * 8-Stage Job Lifecycle as specified in AGENTS.md (centralized in @/lib/lifecycle)
  */
-export type JobStatus =
-  | 'unassigned'
-  | 'assigned'
-  | 'accepted'
-  | 'on_the_way'
-  | 'arrived'
-  | 'in_progress'
-  | 'completed'
-  | 'cancelled';
+export type { JobStatus };
 
 export interface StatusStyle {
   background: string;

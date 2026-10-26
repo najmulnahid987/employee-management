@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   ScrollView,
+  ScrollViewProps,
   StyleProp,
   StyleSheet,
   View,
@@ -18,6 +19,7 @@ export interface ScreenContainerProps {
   style?: StyleProp<ViewStyle>;
   contentContainerStyle?: StyleProp<ViewStyle>;
   edges?: Array<'top' | 'bottom' | 'left' | 'right'>;
+  refreshControl?: ScrollViewProps['refreshControl'];
 }
 
 export function ScreenContainer({
@@ -27,6 +29,7 @@ export function ScreenContainer({
   style,
   contentContainerStyle,
   edges = ['top', 'bottom', 'left', 'right'],
+  refreshControl,
 }: ScreenContainerProps) {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
@@ -61,7 +64,8 @@ export function ScreenContainer({
             contentContainerStyle,
           ]}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled">
+          keyboardShouldPersistTaps="handled"
+          refreshControl={refreshControl}>
           <View style={styles.inner}>{children}</View>
         </ScrollView>
       </View>

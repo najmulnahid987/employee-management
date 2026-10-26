@@ -37,9 +37,12 @@ export default function OwnerBusinessSetupScreen() {
         } else if (role === 'worker') {
           router.replace('/worker/today');
         }
+      } else {
+        // Check if profile was already provisioned in the database
+        refreshProfile();
       }
     }
-  }, [session, profile, role, authLoading]);
+  }, [session, profile, role, authLoading, refreshProfile]);
 
   if (authLoading) {
     return <Loading label="Checking onboarding eligibility..." fullScreen />;

@@ -14,6 +14,12 @@ import {
   signUpWithPassword,
   UserRole,
 } from '@/lib/auth';
+import {
+  reconcileActiveTrackingSession,
+  reconcileBackgroundTrackingOnLaunch,
+  stopBackgroundTrackingAsync,
+} from '@/lib/background-location-task';
+import { foregroundLocationTracker } from '@/lib/location-tracker';
 
 export interface AuthContextValue {
   /** Supabase Auth session */
@@ -126,6 +132,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } else {
               setBusiness(null);
             }
+            // Reconcile background location task for authenticated worker
+            reconcileBackgroundTrackingOnLaunch(initialSession.user.id, userProfile?.role);
           }
         } else {
           setSession(null);
@@ -133,6 +141,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setProfile(null);
           setBusiness(null);
           setProfileError(null);
+          // Kill any orphaned background task on unauthenticated launch
+          reconcileBackgroundTrackingOnLaunch(null, null);
         }
       } catch (err) {
         if (isMounted) {
@@ -155,6 +165,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!isMounted) return;
 
       if (event === 'SIGNED_OUT' || !newSession) {
+        foregroundLocationTracker.stopTracking();
+        stopBackgroundTrackingAsync();
         setSession(null);
         setUser(null);
         setProfile(null);
@@ -184,6 +196,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } else {
             setBusiness(null);
           }
+          // Reconcile tracking session on user change/token refresh
+          reconcileActiveTrackingSession(newSession.user.id, updatedProfile?.role);
         }
       } else {
         setProfile(null);
@@ -221,6 +235,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setBusiness(null);
         }
+        // Reconcile active tracking session on sign-in (stops orphaned tasks if switching accounts)
+        reconcileActiveTrackingSession(result.data.user.id, loadedProfile?.role);
         setIsLoading(false);
         return { success: true };
       } catch (err) {
@@ -280,6 +296,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const handleSignOut = useCallback(async (): Promise<void> => {
     setIsLoading(true);
     try {
+      foregroundLocationTracker.stopTracking();
+      await stopBackgroundTrackingAsync();
       await authSignOut();
     } finally {
       setSession(null);

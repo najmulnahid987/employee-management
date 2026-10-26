@@ -3,21 +3,25 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
-    "@expo/ui": "~57.0.25",
+    "@expo/ui": "~57.0.26",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "^2.118.0",
-    "expo": "~57.0.30",
+    "expo": "~57.0.31",
+    "expo-clipboard": "~57.0.2",
     "expo-constants": "~57.0.22",
     "expo-device": "~57.0.2",
     "expo-font": "~57.0.4",
     "expo-glass-effect": "~57.0.4",
     "expo-image": "~57.0.5",
     "expo-linking": "~57.0.13",
-    "expo-router": "~57.0.28",
+    "expo-location": "~57.0.22",
+    "expo-maps": "~57.0.4",
+    "expo-router": "~57.0.29",
     "expo-splash-screen": "~57.0.10",
     "expo-status-bar": "~57.0.1",
     "expo-symbols": "~57.0.3",
     "expo-system-ui": "~57.0.4",
+    "expo-task-manager": "~57.0.21",
     "expo-web-browser": "~57.0.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -40,7 +44,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test": "node --test --experimental-strip-types scripts/test-lifecycle.mjs scripts/test-realtime.mjs scripts/test-location-rules.mjs scripts/test-location-policy.mjs scripts/test-location-tracker.mjs scripts/test-background-location.mjs scripts/test-owner-locations.mjs scripts/test-tracking-cleanup.mjs scripts/test-m11-acceptance.mjs scripts/test-owner-live-map.mjs scripts/test-m12-acceptance.mjs scripts/test-tracking-sessions.mjs scripts/test-customer-tracking-api.mjs scripts/test-customer-tracking-page.mjs scripts/test-customer-tracking-map.mjs scripts/test-owner-tracking-sharing.mjs scripts/test-m13-acceptance.mjs"
   },
   "private": true
 }

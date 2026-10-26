@@ -1,15 +1,82 @@
-import { router } from 'expo-router';
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback } from 'react';
+import { RefreshControl, StyleSheet, View } from 'react-native';
 
+import { WorkerJobCard } from '@/components/jobs/worker-job-card';
+import { RealtimeStatusBanner } from '@/components/realtime-status-banner';
 import { ThemedText } from '@/components/themed-text';
-import { Button, Card, EmptyState, ScreenContainer } from '@/components/ui';
-import { Spacing } from '@/constants/theme';
+import { Button, Card, EmptyState, Loading, ScreenContainer, StatusBadge } from '@/components/ui';
+import { JobStatus, Palette, Radii, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+import { useWorkerToday } from '@/hooks/use-worker-today';
+import { formatScheduledTime, Job } from '@/lib/jobs';
+import { getNextWorkerAction } from '@/lib/lifecycle';
 
 export default function WorkerTodayScreen() {
+  const theme = useTheme();
+  const {
+    heroJob,
+    queue,
+    todayCompletedCount,
+    isLoading,
+    isRefreshing,
+    error,
+    refetch,
+    onRefresh,
+  } = useWorkerToday();
+
+  // Invalidate and reload operations automatically whenever the screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
+
+  const handleOpenDetails = (job: Job) => {
+    router.push({
+      pathname: '/worker/job-details',
+      params: { id: job.id },
+    });
+  };
+
+  if (isLoading && !isRefreshing) {
+    return <Loading fullScreen label="Loading your schedule..." />;
+  }
+
+  // Determine hero card badge label & styling
+  const isActionRequired = heroJob?.status === 'assigned';
+  const isActiveVisit =
+    heroJob?.status === 'on_the_way' ||
+    heroJob?.status === 'arrived' ||
+    heroJob?.status === 'in_progress';
+
+  const heroBadgeLabel = isActionRequired
+    ? 'ACTION REQUIRED'
+    : isActiveVisit
+    ? 'ACTIVE VISIT'
+    : 'NEXT SCHEDULED VISIT';
+
+  const heroBadgeBg = isActionRequired
+    ? Palette.amberBg
+    : isActiveVisit
+    ? Palette.blueBg
+    : theme.surfaceSecondary;
+
+  const heroBadgeText = isActionRequired
+    ? Palette.amberText
+    : isActiveVisit
+    ? Palette.blueText
+    : theme.textSecondary;
+
   return (
-    <ScreenContainer scrollable withPadding>
+    <ScreenContainer
+      scrollable
+      withPadding
+      refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}>
       <View style={styles.container}>
+        <RealtimeStatusBanner />
+
+        {/* Header */}
         <View style={styles.header}>
           <ThemedText type="headline">Today's Schedule</ThemedText>
           <ThemedText type="body" themeColor="textSecondary">
@@ -17,26 +84,143 @@ export default function WorkerTodayScreen() {
           </ThemedText>
         </View>
 
-        <EmptyState
-          title="You're All Caught Up"
-          description="No jobs are currently scheduled for you today. New service dispatches from your business owner will appear here."
-        />
-
-        {/* Development test shortcut to stack screen */}
-        <Card variant="subtle" style={styles.devCard}>
-          <ThemedText type="label" themeColor="textSecondary">
-            STACK ROUTE PREVIEW
-          </ThemedText>
-          <ThemedText type="caption" themeColor="textSecondary" style={styles.devText}>
-            Inspect the field execution Worker Job Details screen:
-          </ThemedText>
-          <Button
-            label="Open Worker Job Details Placeholder"
+        {/* Error Notification */}
+        {error ? (
+          <Card
             variant="outline"
-            size="sm"
-            onPress={() => router.push('/worker/job-details')}
+            style={[
+              styles.errorCard,
+              { borderColor: theme.dangerBorder, backgroundColor: theme.dangerBackground },
+            ]}>
+            <ThemedText type="bodyMedium" style={{ color: theme.danger }}>
+              Failed to load schedule
+            </ThemedText>
+            <ThemedText type="caption" themeColor="textSecondary">
+              {error}
+            </ThemedText>
+            <Button
+              label="Retry"
+              variant="outline"
+              size="sm"
+              onPress={refetch}
+              style={styles.retryButton}
+            />
+          </Card>
+        ) : null}
+
+        {/* Hero Card: Most Relevant Active or Next Job */}
+        {heroJob ? (
+          <View style={styles.heroSection}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={[styles.heroStatusTag, { backgroundColor: heroBadgeBg }]}>
+                <ThemedText type="label" style={{ color: heroBadgeText }}>
+                  {heroBadgeLabel}
+                </ThemedText>
+              </View>
+              <ThemedText type="caption" themeColor="textSecondary">
+                Job #{heroJob.id.slice(0, 6).toUpperCase()}
+              </ThemedText>
+            </View>
+
+            <Card
+              variant="surface"
+              style={[
+                styles.heroCard,
+                isActionRequired && { borderColor: Palette.amberBorder, borderWidth: 1.5 },
+                isActiveVisit && { borderColor: Palette.blueBorder, borderWidth: 1.5 },
+              ]}>
+              <View style={styles.heroCardHeader}>
+                <ThemedText type="title" style={styles.heroTitle} numberOfLines={2}>
+                  {heroJob.service}
+                </ThemedText>
+                <StatusBadge status={heroJob.status as JobStatus} size="sm" />
+              </View>
+
+              <View style={styles.heroMetaRow}>
+                <ThemedText type="bodyMedium" numberOfLines={1} style={styles.heroCustomer}>
+                  {heroJob.customer_name}
+                </ThemedText>
+                <ThemedText type="captionMedium" themeColor="textSecondary">
+                  {formatScheduledTime(heroJob.scheduled_at)}
+                </ThemedText>
+              </View>
+
+              <View style={styles.heroAddressRow}>
+                <ThemedText
+                  type="caption"
+                  themeColor="textSecondary"
+                  numberOfLines={2}
+                  style={styles.heroAddress}>
+                  {heroJob.address}
+                </ThemedText>
+              </View>
+
+              {heroJob.notes ? (
+                <View style={[styles.heroNotesContainer, { backgroundColor: theme.surfaceSecondary }]}>
+                  <ThemedText type="label" themeColor="textSecondary">
+                    NOTES
+                  </ThemedText>
+                  <ThemedText type="caption" numberOfLines={2} style={styles.heroNotesText}>
+                    {heroJob.notes}
+                  </ThemedText>
+                </View>
+              ) : null}
+
+              {/* Primary Call to Action */}
+              <Button
+                label={
+                  isActionRequired
+                    ? 'Review & Accept Assignment'
+                    : heroJob
+                    ? (() => {
+                        const action = getNextWorkerAction(heroJob.status as JobStatus);
+                        return action ? `${action.label} (Details)` : 'View Job Details';
+                      })()
+                    : 'View Job Details'
+                }
+                variant="primary"
+                fullWidth
+                onPress={() => handleOpenDetails(heroJob)}
+                style={styles.heroActionBtn}
+              />
+            </Card>
+          </View>
+        ) : !error ? (
+          <EmptyState
+            title="You're All Caught Up"
+            description="No service jobs are currently scheduled for you today. New dispatches from your business owner will appear here automatically."
           />
-        </Card>
+        ) : null}
+
+        {/* Remaining Today Queue */}
+        {queue.length > 0 ? (
+          <View style={styles.queueSection}>
+            <ThemedText type="label" themeColor="textSecondary" style={styles.queueHeader}>
+              UPCOMING TODAY ({queue.length})
+            </ThemedText>
+            <View style={styles.queueList}>
+              {queue.map((job) => (
+                <WorkerJobCard
+                  key={job.id}
+                  job={job}
+                  onPress={() => handleOpenDetails(job)}
+                />
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {/* Daily Completed Summary Notice */}
+        {todayCompletedCount > 0 ? (
+          <Card variant="subtle" style={styles.summaryCard}>
+            <View style={styles.summaryRow}>
+              <View style={[styles.summaryDot, { backgroundColor: Palette.greenText }]} />
+              <ThemedText type="captionMedium" themeColor="textSecondary">
+                {todayCompletedCount} service visit{todayCompletedCount > 1 ? 's' : ''} completed today
+              </ThemedText>
+            </View>
+          </Card>
+        ) : null}
       </View>
     </ScreenContainer>
   );
@@ -48,13 +232,93 @@ const styles = StyleSheet.create({
     gap: Spacing.base,
   },
   header: {
+    gap: Spacing.xxs,
+  },
+  errorCard: {
+    padding: Spacing.base,
     gap: Spacing.xs,
   },
-  devCard: {
-    padding: Spacing.base,
-    marginTop: Spacing.lg,
+  retryButton: {
+    alignSelf: 'flex-start',
+    marginTop: Spacing.xs,
   },
-  devText: {
-    marginVertical: Spacing.xs,
+  heroSection: {
+    gap: Spacing.xs,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  heroStatusTag: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: Radii.pill,
+  },
+  heroCard: {
+    padding: Spacing.base,
+    gap: Spacing.sm,
+  },
+  heroCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+  },
+  heroTitle: {
+    flex: 1,
+  },
+  heroMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    gap: Spacing.sm,
+  },
+  heroCustomer: {
+    flex: 1,
+  },
+  heroAddressRow: {
+    marginTop: -2,
+  },
+  heroAddress: {
+    lineHeight: 18,
+  },
+  heroNotesContainer: {
+    padding: Spacing.sm,
+    borderRadius: Radii.sm,
+    gap: 2,
+    marginTop: 2,
+  },
+  heroNotesText: {
+    lineHeight: 16,
+  },
+  heroActionBtn: {
+    marginTop: Spacing.xs,
+  },
+  queueSection: {
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  queueHeader: {
+    letterSpacing: 0.5,
+  },
+  queueList: {
+    gap: Spacing.sm,
+  },
+  summaryCard: {
+    padding: Spacing.sm + 2,
+    marginTop: Spacing.xs,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    justifyContent: 'center',
+  },
+  summaryDot: {
+    width: 8,
+    height: 8,
+    borderRadius: Radii.full,
   },
 });
