@@ -43,7 +43,14 @@
           "isAndroidForegroundServiceEnabled": true
         }
       ],
-      "expo-maps"
+      "expo-maps",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#000000"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

@@ -20,6 +20,11 @@ import {
   stopBackgroundTrackingAsync,
 } from '@/lib/background-location-task';
 import { foregroundLocationTracker } from '@/lib/location-tracker';
+import {
+  deactivateDeviceTokenAsync,
+  registerPushTokenForAuthenticatedUserAsync,
+  setupPushTokenRefreshListener,
+} from '@/lib/notifications';
 
 export interface AuthContextValue {
   /** Supabase Auth session */
@@ -134,6 +139,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
             // Reconcile background location task for authenticated worker
             reconcileBackgroundTrackingOnLaunch(initialSession.user.id, userProfile?.role);
+            // Register push token if device supports push and user granted permission
+            registerPushTokenForAuthenticatedUserAsync().catch(() => {});
           }
         } else {
           setSession(null);
@@ -207,9 +214,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     });
 
+    const tokenRefreshSub = setupPushTokenRefreshListener();
+
     return () => {
       isMounted = false;
       unsubscribe();
+      tokenRefreshSub.unsubscribe();
     };
   }, []);
 
@@ -237,6 +247,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         // Reconcile active tracking session on sign-in (stops orphaned tasks if switching accounts)
         reconcileActiveTrackingSession(result.data.user.id, loadedProfile?.role);
+        // Register push token if device supports push and user granted permission
+        registerPushTokenForAuthenticatedUserAsync().catch(() => {});
         setIsLoading(false);
         return { success: true };
       } catch (err) {
@@ -298,6 +310,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       foregroundLocationTracker.stopTracking();
       await stopBackgroundTrackingAsync();
+      await deactivateDeviceTokenAsync();
       await authSignOut();
     } finally {
       setSession(null);

@@ -63,7 +63,7 @@ Dispatcher is a mobile-first dispatch and job-execution system for small local s
 
 ## Explicit MVP Scope Boundaries
 - **In-Scope:** Job creation, single-worker assignment, execution, status visibility, append-only history, customer link-based tracking, native communication launchers (call/map), basic billing readiness fields.
-- **Strictly Excluded (No Scope Creep):** AI scheduling, payroll/wages, invoicing/payments, inventory/parts, CRM, automated route optimization, native customer mobile app, multi-worker assignment, multi-business tenancy.
+- **Strictly Excluded (No Scope Creep):** AI scheduling, payroll/wages, invoicing/payments, inventory/parts, CRM, automated route optimization, native customer mobile app, multi-worker assignment, multi-business tenancy, automated SMS messaging / Twilio integration (Phase M14 DEFERRED: customer tracking relies exclusively on manual link copying and native sharing).
 - Future-phase features mentioned for readiness are not considered implemented.
 
 ## Core Engineering & Architecture Rules
@@ -99,6 +99,28 @@ Dispatcher is a mobile-first dispatch and job-execution system for small local s
 - Do not add dependencies unless needed for the current task.
 - Do not build product features during Phase 1.
 - Run the relevant checks after every change.
+
+## Project Roadmap & Milestone Status
+- **Phase M0:** Frozen Baseline Specification & Architecture — **COMPLETE**
+- **Phase M1:** Design System Tokens & Base UI Components — **COMPLETE**
+- **Phase M2:** Shared Authentication & Onboarding UI — **COMPLETE**
+- **Phase M3:** Core Screen Layouts (16 Mobile Screens) — **COMPLETE**
+- **Phase M4:** PostgreSQL Schema, Relational Integrity & RLS Security — **COMPLETE**
+- **Phase M5:** Supabase Authentication & Session Management — **COMPLETE**
+- **Phase M6:** Owner Business Setup & Worker Team Management — **COMPLETE**
+- **Phase M7:** Owner Job Creation & Single-Worker Assignment — **COMPLETE**
+- **Phase M8:** Worker Job Execution & Sequential Status Transitions — **COMPLETE**
+- **Phase M9:** Lifecycle Concurrency, Idempotency & Terminal Locking — **COMPLETE**
+- **Phase M10:** Realtime Event Subscriptions & Socket Reconnection — **COMPLETE**
+- **Phase M11:** Worker Background Location Tracking & Breadcrumbs — **COMPLETE**
+- **Phase M12:** Owner Live Map & Realtime Territory Visualization — **COMPLETE**
+- **Phase M13:** Public Customer Tracking Web Page, Tokenized Sessions & Sharing — **COMPLETE**
+- **Phase M14 (SMS with Twilio):** Automated SMS dispatch & carrier messaging — **DEFERRED**
+  - *Status:* Intentionally deferred. Do not implement SMS or automated messaging.
+  - *Rules:* Do not install Twilio packages or add SMS integrations; do not add Twilio credentials, environment variables, webhooks, or SMS-related database changes.
+  - *Workflow:* Preserve the existing customer tracking-link functionality and manual copy/share workflow (`expo-clipboard` and native `Share.share`).
+  - *Sequencing:* Continue with the next planned phase without renumbering existing phases or introducing SMS as a dependency.
+- **Phase M15:** Billing Readiness & Stripe Subscriptions Integration — **PLANNED**
 
 ## M4 Security & Authorization Architecture
 
@@ -183,6 +205,7 @@ Dispatcher is a mobile-first dispatch and job-execution system for small local s
 ### 10. Phase Limitations & Prerequisites
 - **Auth Phase:** Connect Supabase Auth (`signUp`, `signInWithPassword`) with secure token storage (`expo-secure-store`) and wire worker invitation join tokens.
 - **Customer Tracking Phase:** Implement dedicated customer web frontend and configure CDN reverse-proxy rate limiting (60 req/min/IP).
+- **Twilio SMS Phase (Phase M14):** DEFERRED. No automated SMS or Twilio integration. Preserve manual copy/share workflow.
 - **Billing Phase:** Deploy Supabase Edge Functions with `STRIPE_WEBHOOK_SECRET` to update `subscriptions`.
 
 ---

@@ -1,8 +1,10 @@
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback } from 'react';
-import { RefreshControl, StyleSheet, View } from 'react-native';
+import { Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { WorkerJobCard } from '@/components/jobs/worker-job-card';
+import { InAppNotificationsSheet } from '@/components/in-app-notifications-sheet';
+import { NotificationPermissionPrompt } from '@/components/notification-permission-prompt';
 import { RealtimeStatusBanner } from '@/components/realtime-status-banner';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, EmptyState, Loading, ScreenContainer, StatusBadge } from '@/components/ui';
@@ -14,6 +16,7 @@ import { getNextWorkerAction } from '@/lib/lifecycle';
 
 export default function WorkerTodayScreen() {
   const theme = useTheme();
+  const [isNotificationsVisible, setIsNotificationsVisible] = React.useState<boolean>(false);
   const {
     heroJob,
     queue,
@@ -75,13 +78,24 @@ export default function WorkerTodayScreen() {
       refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}>
       <View style={styles.container}>
         <RealtimeStatusBanner />
+        <NotificationPermissionPrompt />
 
         {/* Header */}
         <View style={styles.header}>
-          <ThemedText type="headline">Today's Schedule</ThemedText>
-          <ThemedText type="body" themeColor="textSecondary">
-            Your active service assignments and execution queue.
-          </ThemedText>
+          <View style={styles.headerTextGroup}>
+            <ThemedText type="headline">Today's Schedule</ThemedText>
+            <ThemedText type="body" themeColor="textSecondary">
+              Your active service assignments and execution queue.
+            </ThemedText>
+          </View>
+
+          <Pressable
+            onPress={() => setIsNotificationsVisible(true)}
+            style={styles.bellButton}
+            accessibilityLabel="Open notifications"
+            accessibilityRole="button">
+            <ThemedText style={styles.bellIcon}>🔔</ThemedText>
+          </Pressable>
         </View>
 
         {/* Error Notification */}
@@ -221,6 +235,17 @@ export default function WorkerTodayScreen() {
             </View>
           </Card>
         ) : null}
+
+        <InAppNotificationsSheet
+          visible={isNotificationsVisible}
+          onClose={() => setIsNotificationsVisible(false)}
+          onSelectJob={(jobId) => {
+            router.push({
+              pathname: '/worker/job-details',
+              params: { id: jobId },
+            });
+          }}
+        />
       </View>
     </ScreenContainer>
   );
@@ -232,7 +257,27 @@ const styles = StyleSheet.create({
     gap: Spacing.base,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  headerTextGroup: {
+    flex: 1,
     gap: Spacing.xxs,
+  },
+  bellButton: {
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: Spacing.xs + 2,
+    borderRadius: Radii.sm,
+    borderWidth: 1,
+    borderColor: Palette.neutral300,
+    backgroundColor: Palette.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellIcon: {
+    fontSize: 16,
   },
   errorCard: {
     padding: Spacing.base,

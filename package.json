@@ -16,6 +16,7 @@
     "expo-linking": "~57.0.13",
     "expo-location": "~57.0.22",
     "expo-maps": "~57.0.4",
+    "expo-notifications": "~57.0.24",
     "expo-router": "~57.0.29",
     "expo-splash-screen": "~57.0.10",
     "expo-status-bar": "~57.0.1",
@@ -45,7 +46,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "node --test --experimental-strip-types scripts/test-lifecycle.mjs scripts/test-realtime.mjs scripts/test-location-rules.mjs scripts/test-location-policy.mjs scripts/test-location-tracker.mjs scripts/test-background-location.mjs scripts/test-owner-locations.mjs scripts/test-tracking-cleanup.mjs scripts/test-m11-acceptance.mjs scripts/test-owner-live-map.mjs scripts/test-m12-acceptance.mjs scripts/test-tracking-sessions.mjs scripts/test-customer-tracking-api.mjs scripts/test-customer-tracking-page.mjs scripts/test-customer-tracking-map.mjs scripts/test-owner-tracking-sharing.mjs scripts/test-m13-acceptance.mjs"
+    "test": "node --test --experimental-strip-types scripts/test-lifecycle.mjs scripts/test-realtime.mjs scripts/test-location-rules.mjs scripts/test-location-policy.mjs scripts/test-location-tracker.mjs scripts/test-background-location.mjs scripts/test-owner-locations.mjs scripts/test-tracking-cleanup.mjs scripts/test-m11-acceptance.mjs scripts/test-owner-live-map.mjs scripts/test-m12-acceptance.mjs scripts/test-tracking-sessions.mjs scripts/test-customer-tracking-api.mjs scripts/test-customer-tracking-page.mjs scripts/test-customer-tracking-map.mjs scripts/test-owner-tracking-sharing.mjs scripts/test-m13-acceptance.mjs scripts/test-notifications-setup.mjs scripts/test-device-tokens.mjs scripts/test-notification-pipeline.mjs scripts/test-notification-deep-links.mjs scripts/test-notification-deduplication.mjs scripts/test-m15-acceptance.mjs"
   },
   "private": true
 }

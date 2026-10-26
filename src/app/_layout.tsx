@@ -6,11 +6,20 @@ import { useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AuthRecoveryView } from '@/components/auth-recovery-view';
+import { InAppNotificationBanner } from '@/components/in-app-notification-banner';
 import { AuthProvider } from '@/contexts/auth-context';
 import { RealtimeProvider } from '@/contexts/realtime-context';
 import { useAuth } from '@/hooks/use-auth';
 // Register background location task at root module scope
 import '@/lib/background-location-task';
+// Configure notification presentation handler and Android channels at root module scope
+import '@/lib/notifications';
+import {
+  ForegroundNotificationAlert,
+  resumePendingNotificationNavigation,
+  setupNotificationDeepLinking,
+} from '@/lib/notification-navigation';
+import { resolveNotificationRoute } from '@/lib/notification-navigation-core';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -118,12 +127,63 @@ function NavigationRouteGuard() {
 }
 
 function RootContent() {
-  const { isLoading } = useAuth();
+  const { isLoading, session, role } = useAuth();
+  const [activeBanner, setActiveBanner] = React.useState<ForegroundNotificationAlert | null>(null);
+
+  // Setup notification deep linking listeners for cold and warm starts
+  useEffect(() => {
+    const { unsubscribe } = setupNotificationDeepLinking({
+      role: role as 'owner' | 'worker' | null,
+      isAuthenticated: Boolean(session),
+      onNavigate: (target) => {
+        router.push({
+          pathname: target.pathname as any,
+          params: target.params,
+        });
+      },
+      onForegroundNotification: (alert) => {
+        setActiveBanner(alert);
+      },
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [session, role]);
+
+  // Check and consume pending notification navigation once user completes sign-in
+  useEffect(() => {
+    if (!isLoading && session && role) {
+      resumePendingNotificationNavigation(role as 'owner' | 'worker', (target) => {
+        router.push({
+          pathname: target.pathname as any,
+          params: target.params,
+        });
+      });
+    }
+  }, [isLoading, session, role]);
+
+  const handleBannerPress = (jobId: string) => {
+    setActiveBanner(null);
+    if (!role) return;
+    const target = resolveNotificationRoute(role as 'owner' | 'worker', jobId);
+    if (target) {
+      router.push({
+        pathname: target.pathname as any,
+        params: target.params,
+      });
+    }
+  };
 
   return (
     <>
       <AnimatedSplashOverlay isReady={!isLoading} />
       <NavigationRouteGuard />
+      <InAppNotificationBanner
+        alert={activeBanner}
+        onPress={handleBannerPress}
+        onDismiss={() => setActiveBanner(null)}
+      />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="sign-in" options={{ headerShown: false }} />

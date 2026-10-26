@@ -227,6 +227,7 @@ The following capabilities are **strictly excluded** from the MVP:
 - **Independent Customer Mobile App:** No native iOS/Android app for customers (customer experience is exclusively the web tracking link).
 - **Multi-Worker Job Assignment:** No split jobs, crew assignments, or multi-worker collaboration on a single job.
 - **Multi-Business Membership:** Users belong to exactly one business tenant.
+- **Automated SMS & Third-Party Messaging (Phase M14 — DEFERRED):** No Twilio packages, automated SMS dispatch, or carrier webhooks; customer tracking links are shared manually via clipboard and native share launcher.
 
 > [!IMPORTANT]
 > Mentioning future-phase concepts (such as billing readiness or map coordinates) in this specification does not mean they are implemented in the MVP. Scope creep will be rejected.

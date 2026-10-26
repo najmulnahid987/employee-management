@@ -404,6 +404,11 @@ npx supabase test db
 2. **Webhook Verification:** Verify `Stripe-Signature` headers within Edge Functions using `STRIPE_WEBHOOK_SECRET`.
 3. **Customer Portal / Checkout:** Launch Stripe Customer Portal via authenticated Edge Functions; keep `public.subscriptions` client-read-only.
 
+### 14.4 SMS Messaging & Third-Party Telephony (Phase M14 — DEFERRED)
+1. **Deferred Status:** Phase M14 (Twilio SMS) is intentionally deferred from the current development roadmap.
+2. **Hygiene Rules:** Do not install Twilio packages, add SMS credentials or environment variables, or create SMS-related database columns or webhooks.
+3. **Preserved Workflows:** Customer tracking link distribution remains exclusively via manual native sharing (`Share.share`) and clipboard copy (`expo-clipboard`) as established in Milestone 13.
+
 ---
 
 ## 15. Security Sign-Off Notice

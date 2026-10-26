@@ -102,6 +102,56 @@ export type Database = {
           }
         ]
       }
+      device_tokens: {
+        Row: {
+          app_version: string | null
+          business_id: string
+          created_at: string
+          device_name: string | null
+          device_platform: string
+          expo_push_token: string
+          id: string
+          is_active: boolean
+          last_used_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          app_version?: string | null
+          business_id: string
+          created_at?: string
+          device_name?: string | null
+          device_platform?: string
+          expo_push_token: string
+          id?: string
+          is_active?: boolean
+          last_used_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          app_version?: string | null
+          business_id?: string
+          created_at?: string
+          device_name?: string | null
+          device_platform?: string
+          expo_push_token?: string
+          id?: string
+          is_active?: boolean
+          last_used_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_tokens_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       job_events: {
         Row: {
           actor_id: string | null
@@ -394,6 +444,66 @@ export type Database = {
           },
         ]
       }
+      notification_deliveries: {
+        Row: {
+          business_id: string
+          created_at: string
+          delivered_at: string | null
+          device_tokens_count: number
+          error_message: string | null
+          expo_ticket_ids: Json
+          id: string
+          idempotency_key: string
+          job_event_id: string
+          notification_type: string
+          recipient_user_id: string
+          status: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          delivered_at?: string | null
+          device_tokens_count?: number
+          error_message?: string | null
+          expo_ticket_ids?: Json
+          id?: string
+          idempotency_key: string
+          job_event_id: string
+          notification_type: string
+          recipient_user_id: string
+          status?: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          delivered_at?: string | null
+          device_tokens_count?: number
+          error_message?: string | null
+          expo_ticket_ids?: Json
+          id?: string
+          idempotency_key?: string
+          job_event_id?: string
+          notification_type?: string
+          recipient_user_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_deliveries_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_deliveries_job_event_id_fkey"
+            columns: ["job_event_id"]
+            isOneToOne: false
+            referencedRelation: "job_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -515,6 +625,31 @@ export type Database = {
           p_token: string
         }
         Returns: Json
+      }
+      register_device_token: {
+        Args: {
+          p_expo_push_token: string
+          p_device_platform?: string
+          p_device_name?: string | null
+          p_app_version?: string | null
+        }
+        Returns: Database["public"]["Tables"]["device_tokens"]["Row"]
+      }
+      deactivate_device_token: {
+        Args: {
+          p_expo_push_token: string
+        }
+        Returns: boolean
+      }
+      claim_notification_delivery: {
+        Args: {
+          p_job_event_id: string
+          p_recipient_user_id: string
+          p_business_id: string
+          p_notification_type: string
+          p_idempotency_key: string
+        }
+        Returns: string
       }
     }
     Enums: {

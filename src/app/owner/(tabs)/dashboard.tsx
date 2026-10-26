@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 
 import { JobCard } from '@/components/jobs/job-card';
+import { InAppNotificationsSheet } from '@/components/in-app-notifications-sheet';
+import { NotificationPermissionPrompt } from '@/components/notification-permission-prompt';
 import { RealtimeStatusBanner } from '@/components/realtime-status-banner';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, EmptyState, Loading, ScreenContainer } from '@/components/ui';
@@ -19,6 +21,7 @@ import { formatHeaderDate, JobWithWorker } from '@/lib/jobs';
 
 export default function OwnerDashboardScreen() {
   const theme = useTheme();
+  const [isNotificationsVisible, setIsNotificationsVisible] = React.useState<boolean>(false);
   const {
     jobs,
     sections,
@@ -64,6 +67,7 @@ export default function OwnerDashboardScreen() {
       }>
       <View style={styles.container}>
         <RealtimeStatusBanner />
+        <NotificationPermissionPrompt />
 
         {/* Header Section */}
         <View style={styles.header}>
@@ -79,13 +83,22 @@ export default function OwnerDashboardScreen() {
             </ThemedText>
           </View>
 
-          <Button
-            label="+ Create Job"
-            variant="primary"
-            size="md"
-            onPress={() => router.push('/owner/create-job')}
-            style={styles.createButton}
-          />
+          <View style={styles.headerActions}>
+            <Pressable
+              onPress={() => setIsNotificationsVisible(true)}
+              style={styles.bellButton}
+              accessibilityLabel="Open notifications"
+              accessibilityRole="button">
+              <ThemedText style={styles.bellIcon}>🔔</ThemedText>
+            </Pressable>
+            <Button
+              label="+ Create Job"
+              variant="primary"
+              size="md"
+              onPress={() => router.push('/owner/create-job')}
+              style={styles.createButton}
+            />
+          </View>
         </View>
 
         {/* Error State */}
@@ -267,6 +280,17 @@ export default function OwnerDashboardScreen() {
             </View>
           </>
         )}
+
+        <InAppNotificationsSheet
+          visible={isNotificationsVisible}
+          onClose={() => setIsNotificationsVisible(false)}
+          onSelectJob={(jobId) => {
+            router.push({
+              pathname: '/owner/job-details',
+              params: { id: jobId },
+            });
+          }}
+        />
       </View>
     </ScreenContainer>
   );
@@ -280,6 +304,24 @@ const styles = StyleSheet.create({
   header: {
     gap: Spacing.md,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  bellButton: {
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: Spacing.xs + 2,
+    borderRadius: Radii.sm,
+    borderWidth: 1,
+    borderColor: Palette.neutral300,
+    backgroundColor: Palette.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellIcon: {
+    fontSize: 16,
+  },
   headerTextGroup: {
     gap: Spacing.xxs,
   },
@@ -287,7 +329,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   createButton: {
-    marginTop: Spacing.xs,
+    flex: 1,
   },
   errorCard: {
     padding: Spacing.base,

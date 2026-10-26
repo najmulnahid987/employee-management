@@ -392,6 +392,11 @@ deno_version = 2
 [functions.customer-tracking]
 verify_jwt = false
 
+# Push Notifications Dispatcher Function (Milestone 15.4)
+# Verifies JWT / service-role authentication for database webhook triggers
+[functions.push-notifications]
+verify_jwt = true
+
 [analytics]
 enabled = true
 port = 54327
