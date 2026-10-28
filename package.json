@@ -1,5 +1,5 @@
 {
-  "name": "project",
+  "name": "dispatcher",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
@@ -18,6 +18,7 @@
     "expo-maps": "~57.0.4",
     "expo-notifications": "~57.0.24",
     "expo-router": "~57.0.29",
+    "expo-secure-store": "~57.0.4",
     "expo-splash-screen": "~57.0.10",
     "expo-status-bar": "~57.0.1",
     "expo-symbols": "~57.0.3",
@@ -37,16 +38,17 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "~57.0.2",
     "typescript": "~6.0.3"
   },
   "scripts": {
     "start": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "node --test --experimental-strip-types scripts/test-lifecycle.mjs scripts/test-realtime.mjs scripts/test-location-rules.mjs scripts/test-location-policy.mjs scripts/test-location-tracker.mjs scripts/test-background-location.mjs scripts/test-owner-locations.mjs scripts/test-tracking-cleanup.mjs scripts/test-m11-acceptance.mjs scripts/test-owner-live-map.mjs scripts/test-m12-acceptance.mjs scripts/test-tracking-sessions.mjs scripts/test-customer-tracking-api.mjs scripts/test-customer-tracking-page.mjs scripts/test-customer-tracking-map.mjs scripts/test-owner-tracking-sharing.mjs scripts/test-m13-acceptance.mjs scripts/test-notifications-setup.mjs scripts/test-device-tokens.mjs scripts/test-notification-pipeline.mjs scripts/test-notification-deep-links.mjs scripts/test-notification-deduplication.mjs scripts/test-m15-acceptance.mjs"
+    "test": "node --test --experimental-strip-types scripts/test-lifecycle.mjs scripts/test-realtime.mjs scripts/test-location-rules.mjs scripts/test-location-policy.mjs scripts/test-location-tracker.mjs scripts/test-background-location.mjs scripts/test-owner-locations.mjs scripts/test-tracking-cleanup.mjs scripts/test-m11-acceptance.mjs scripts/test-owner-live-map.mjs scripts/test-m12-acceptance.mjs scripts/test-tracking-sessions.mjs scripts/test-customer-tracking-api.mjs scripts/test-customer-tracking-page.mjs scripts/test-customer-tracking-map.mjs scripts/test-owner-tracking-sharing.mjs scripts/test-m13-acceptance.mjs scripts/test-notifications-setup.mjs scripts/test-device-tokens.mjs scripts/test-notification-pipeline.mjs scripts/test-notification-deep-links.mjs scripts/test-notification-deduplication.mjs scripts/test-m15-acceptance.mjs scripts/test-job-history-service.mjs scripts/test-job-event-timeline.mjs scripts/test-job-history-performance.mjs scripts/test-m16-acceptance.mjs scripts/test-worker-onboarding-security.mjs"
   },
   "private": true
 }

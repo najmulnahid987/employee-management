@@ -504,6 +504,53 @@ export type Database = {
           },
         ]
       }
+      worker_invitations: {
+        Row: {
+          business_id: string
+          created_at: string
+          email: string | null
+          expires_at: string
+          id: string
+          invite_code: string
+          invited_by: string
+          is_used: boolean
+          updated_at: string
+          used_by: string | null
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          email?: string | null
+          expires_at?: string
+          id?: string
+          invite_code: string
+          invited_by: string
+          is_used?: boolean
+          updated_at?: string
+          used_by?: string | null
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          email?: string | null
+          expires_at?: string
+          id?: string
+          invite_code?: string
+          invited_by?: string
+          is_used?: boolean
+          updated_at?: string
+          used_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "worker_invitations_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -648,6 +695,26 @@ export type Database = {
           p_business_id: string
           p_notification_type: string
           p_idempotency_key: string
+        }
+        Returns: string
+      }
+      create_worker_invitation: {
+        Args: {
+          p_email?: string | null
+        }
+        Returns: Json
+      }
+      verify_worker_invitation: {
+        Args: {
+          p_invite_code: string
+        }
+        Returns: Json
+      }
+      join_business_team: {
+        Args: {
+          p_invite_code: string
+          p_full_name: string
+          p_phone?: string | null
         }
         Returns: string
       }

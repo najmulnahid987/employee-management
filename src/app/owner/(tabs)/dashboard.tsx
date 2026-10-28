@@ -154,7 +154,10 @@ export default function OwnerDashboardScreen() {
                 </ThemedText>
               </Card>
 
-              <Card variant="subtle" style={styles.summaryCard}>
+              <Card
+                variant="subtle"
+                style={styles.summaryCard}
+                onPress={() => router.push('/owner/job-history')}>
                 <ThemedText type="title" style={[styles.metricValue, { color: Palette.greenText }]}>
                   {summary.completed}
                 </ThemedText>

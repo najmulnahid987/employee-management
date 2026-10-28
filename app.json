@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "project",
-    "slug": "project",
+    "name": "Dispatcher",
+    "slug": "dispatcher",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "project",
+    "scheme": "dispatcher",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon"
@@ -25,6 +25,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-secure-store",
       [
         "expo-splash-screen",
         {

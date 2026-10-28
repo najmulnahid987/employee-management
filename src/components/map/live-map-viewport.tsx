@@ -15,7 +15,7 @@
 
 import Constants, { AppOwnership, ExecutionEnvironment } from 'expo-constants';
 import { AppleMaps, GoogleMaps } from 'expo-maps';
-import React, { useRef } from 'react';
+import React, { useMemo } from 'react';
 import { Platform, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -83,6 +83,31 @@ export function LiveMapViewport({
   onSelectMarker,
 }: LiveMapViewportProps) {
   const theme = useTheme();
+
+  // Stable initial camera position to prevent resetting camera on telemetry refreshes
+  const cameraPosition = useMemo(() => {
+    if (initialCoordinates) {
+      return { coordinates: initialCoordinates, zoom };
+    }
+    const firstValid = items.find(
+      (item) =>
+        item.workerLatitude !== null &&
+        item.workerLongitude !== null &&
+        Number.isFinite(item.workerLatitude) &&
+        Number.isFinite(item.workerLongitude)
+    );
+    if (firstValid && firstValid.workerLatitude !== null && firstValid.workerLongitude !== null) {
+      return {
+        coordinates: {
+          latitude: firstValid.workerLatitude,
+          longitude: firstValid.workerLongitude,
+        },
+        zoom,
+      };
+    }
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 1. Check if running in standard Expo Go (which lacks native expo-maps binaries)
   const isExpoGo =
@@ -205,27 +230,6 @@ export function LiveMapViewport({
       </View>
     );
   }
-
-  // 5. Stable initial camera position to prevent resetting camera on telemetry refreshes
-  const initialCoordsRef = useRef<{ latitude: number; longitude: number } | null>(null);
-
-  if (!initialCoordsRef.current) {
-    if (initialCoordinates) {
-      initialCoordsRef.current = initialCoordinates;
-    } else {
-      initialCoordsRef.current = {
-        latitude: validLiveItems[0].workerLatitude!,
-        longitude: validLiveItems[0].workerLongitude!,
-      };
-    }
-  }
-
-  const cameraPosition = initialCoordsRef.current
-    ? {
-        coordinates: initialCoordsRef.current,
-        zoom,
-      }
-    : undefined;
 
   // 6. Native Map Rendering with Error Boundary
   return (

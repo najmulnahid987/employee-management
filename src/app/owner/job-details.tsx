@@ -5,6 +5,7 @@ import { Alert, Linking, Platform, RefreshControl, Share, StyleSheet, View } fro
 
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Loading, ScreenContainer, StatusBadge } from '@/components/ui';
+import { JobEventTimeline } from '@/components/jobs/job-event-timeline';
 import { WorkerSelectorSheet } from '@/components/jobs/worker-selector-sheet';
 import { JobStatus, Palette, Radii, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/use-auth';
@@ -441,9 +442,9 @@ export default function OwnerJobDetailsScreen() {
     const workerName = job.worker?.full_name?.trim();
     const shortJobId = `JOB-${job.id.slice(0, 6).toUpperCase()}`;
 
-    // Look for previous decline event for decline review
+    // Look for previous decline event for decline review (newest first from reverse)
     const latestDeclineEvent = isUnassigned
-      ? job.events?.find(
+      ? [...(job.events || [])].reverse().find(
           (e) =>
             e.event_type === 'declined' ||
             (e.previous_status === 'assigned' && e.new_status === 'unassigned' && e.actor_role === 'worker')
@@ -718,6 +719,14 @@ export default function OwnerJobDetailsScreen() {
               </View>
             )}
           </Card>
+
+          {/* Activity Event Timeline */}
+          <JobEventTimeline
+            events={job.events}
+            isLoading={isLoading && !isRefreshing}
+            error={job.eventsError}
+            onRetry={() => loadJob(false)}
+          />
 
           {/* Cancellation Action (Non-terminal jobs only) */}
           {!isTerminal ? (

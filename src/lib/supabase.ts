@@ -1,8 +1,8 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
 import { setupURLPolyfill } from 'react-native-url-polyfill';
 
+import { secureStorage } from '@/lib/secure-storage';
 import type { Database } from '@/types/database';
 
 // Apply WHATWG URL polyfill only on native platforms (Hermes/Native) where needed
@@ -28,11 +28,11 @@ if (!supabaseAnonKey || typeof supabaseAnonKey !== 'string' || supabaseAnonKey.l
 
 /**
  * Exactly one shared Supabase client typed with the generated Database schema.
- * Configured with AsyncStorage session persistence and standard Expo compatibility.
+ * Configured with hardware-backed secure storage on mobile and AsyncStorage on web.
  */
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: Platform.OS === 'web' && typeof window === 'undefined' ? undefined : AsyncStorage,
+    storage: Platform.OS === 'web' && typeof window === 'undefined' ? undefined : secureStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,

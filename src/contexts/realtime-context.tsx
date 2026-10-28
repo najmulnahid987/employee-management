@@ -65,7 +65,12 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
   // Synchronous ref mirroring status to avoid stale closure capture
   const statusRef = useRef<RealtimeConnectionStatus>('DISCONNECTED');
-  statusRef.current = status;
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  // Forward ref for establishSubscription auto-recovery calls
+  const establishSubscriptionRef = useRef<(() => Promise<void>) | null>(null);
 
   // Guard against updating state after unmount
   const isMountedRef = useRef<boolean>(true);
@@ -189,7 +194,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
               if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
               retryTimerRef.current = setTimeout(() => {
                 if (isMountedRef.current) {
-                  establishSubscription();
+                  establishSubscriptionRef.current?.();
                 }
               }, delay);
             }
@@ -221,6 +226,10 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     isAuthLoading,
     teardownActiveSubscription,
   ]);
+
+  useEffect(() => {
+    establishSubscriptionRef.current = establishSubscription;
+  }, [establishSubscription]);
 
   // Main subscription lifecycle effect
   useEffect(() => {

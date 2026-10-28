@@ -53,7 +53,19 @@ export function sanitizeAuthError(error: unknown): string {
   }
 
   if (message.includes('provision_business') || message.includes('PGRST202')) {
-    return 'Database function "provision_business" not found. Please run the migration (20261022223000_rls_security_policies.sql) in your Supabase SQL Editor.';
+    return 'Database function "provision_business" not found. Please run the migration in your Supabase SQL Editor.';
+  }
+  if (message.includes('Invalid invitation code')) {
+    return 'Invalid invitation code. Please check the code with your employer.';
+  }
+  if (message.includes('already been used')) {
+    return 'This invitation code has already been used.';
+  }
+  if (message.includes('has expired')) {
+    return 'This invitation code has expired. Please ask your employer to issue a new invite.';
+  }
+  if (message.includes('cannot join a new business')) {
+    return 'Your account is already linked to a business profile.';
   }
   if (message.includes('Invalid login credentials')) {
     return 'Invalid email or password. Please verify your credentials and try again.';
@@ -329,4 +341,104 @@ export async function provisionBusinessProfile(params: {
     return { success: false, error: sanitizeAuthError(err) };
   }
 }
+
+/**
+ * Generates a single-use worker invitation code for team onboarding.
+ * Restricted to business owners.
+ */
+export async function createWorkerInvitation(
+  email?: string
+): Promise<AuthResult<{ id: string; invite_code: string; expires_at: string }>> {
+  try {
+    const { data, error } = await supabase.rpc('create_worker_invitation', {
+      p_email: email?.trim() || null,
+    });
+
+    if (error) {
+      return { success: false, error: sanitizeAuthError(error) };
+    }
+
+    if (!data || typeof data !== 'object') {
+      return { success: false, error: 'Failed to generate invitation code.' };
+    }
+
+    const payload = data as { id: string; invite_code: string; expires_at: string };
+    return { success: true, data: payload };
+  } catch (err) {
+    return { success: false, error: sanitizeAuthError(err) };
+  }
+}
+
+/**
+ * Validates a worker invitation code before submission.
+ */
+export async function verifyWorkerInvitation(
+  inviteCode: string
+): Promise<AuthResult<{ valid: boolean; business_name?: string; error?: string }>> {
+  try {
+    const trimmed = inviteCode.trim();
+    if (!trimmed) {
+      return { success: false, error: 'Please enter an invitation code.' };
+    }
+
+    const { data, error } = await supabase.rpc('verify_worker_invitation', {
+      p_invite_code: trimmed,
+    });
+
+    if (error) {
+      return { success: false, error: sanitizeAuthError(error) };
+    }
+
+    const payload = data as { valid: boolean; business_name?: string; error?: string };
+    if (!payload.valid) {
+      return { success: false, error: payload.error || 'Invalid or expired invitation code.' };
+    }
+
+    return { success: true, data: payload };
+  } catch (err) {
+    return { success: false, error: sanitizeAuthError(err) };
+  }
+}
+
+/**
+ * Joins a worker into a business team using a valid invitation code.
+ * Atomically provisions their worker profile and burns the invitation.
+ */
+export async function joinBusinessTeam(params: {
+  inviteCode: string;
+  fullName: string;
+  phone?: string;
+}): Promise<AuthResult<string>> {
+  try {
+    const trimmedCode = params.inviteCode.trim();
+    const trimmedName = params.fullName.trim();
+    const trimmedPhone = params.phone?.trim() || null;
+
+    if (!trimmedCode) {
+      return { success: false, error: 'Invitation code is required.' };
+    }
+    if (!trimmedName) {
+      return { success: false, error: 'Your full name is required.' };
+    }
+
+    const { data, error } = await supabase.rpc('join_business_team', {
+      p_invite_code: trimmedCode,
+      p_full_name: trimmedName,
+      p_phone: trimmedPhone,
+    });
+
+    if (error) {
+      return { success: false, error: sanitizeAuthError(error) };
+    }
+
+    if (!data) {
+      return { success: false, error: 'Failed to join business team.' };
+    }
+
+    return { success: true, data };
+  } catch (err) {
+    return { success: false, error: sanitizeAuthError(err) };
+  }
+}
+
 

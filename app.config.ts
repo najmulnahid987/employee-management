@@ -9,8 +9,8 @@ import { ConfigContext, ExpoConfig } from 'expo/config';
  */
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: config.name ?? 'project',
-  slug: config.slug ?? 'project',
+  name: config.name ?? 'Dispatcher',
+  slug: config.slug ?? 'dispatcher',
   ios: {
     ...config.ios,
     bundleIdentifier: config.ios?.bundleIdentifier ?? 'com.dispatcher.mobile',

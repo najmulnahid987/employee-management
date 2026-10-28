@@ -70,12 +70,20 @@ export default function OwnerJobsScreen() {
           </ThemedText>
         </View>
 
-        <Button
-          label="+ Create Job"
-          variant="primary"
-          size="sm"
-          onPress={() => router.push('/owner/create-job')}
-        />
+        <View style={{ flexDirection: 'row', gap: Spacing.xs, alignItems: 'center' }}>
+          <Button
+            label="History"
+            variant="outline"
+            size="sm"
+            onPress={() => router.push('/owner/job-history')}
+          />
+          <Button
+            label="+ Create Job"
+            variant="primary"
+            size="sm"
+            onPress={() => router.push('/owner/create-job')}
+          />
+        </View>
       </View>
 
       {/* Search Input */}

@@ -62,43 +62,6 @@ export function createManagedJobsSubscription(
   );
 }
 
-/**
- * Checks whether the Supabase Realtime WebSocket client and specific channel are healthy.
- * Uses only documented properties of the official Supabase SDK.
- */
-export function checkRealtimeHealth(
-  client: SupabaseClient<Database> = defaultSupabase,
-  channel?: RealtimeChannel | null
-): { isSocketConnected: boolean; isChannelSubscribed: boolean; isHealthy: boolean } {
-  const isSocketConnected =
-    typeof client.realtime?.isConnected === 'function' ? client.realtime.isConnected() : false;
-
-  const isChannelSubscribed = channel ? channel.state === 'joined' : true;
-
-  return {
-    isSocketConnected,
-    isChannelSubscribed,
-    isHealthy: isSocketConnected && isChannelSubscribed,
-  };
-}
-
-/**
- * Ensures the underlying Realtime socket client is actively connected using Supabase SDK APIs.
- */
-export function ensureRealtimeSocketConnected(
-  client: SupabaseClient<Database> = defaultSupabase
-): void {
-  try {
-    if (typeof client.realtime?.isConnected === 'function' && !client.realtime.isConnected()) {
-      client.realtime.connect();
-    }
-  } catch (err) {
-    if (__DEV__) {
-      console.warn('[RealtimeManager] Socket connect error:', err);
-    }
-  }
-}
-
 let lastReconcileTimestamp = 0;
 const RECONCILIATION_THROTTLE_MS = 250;
 

@@ -43,11 +43,16 @@ export interface JobEventRecord {
   new_status: string | null;
   metadata: Record<string, unknown> | null;
   created_at: string;
+  actor_name?: string | null;
+  actor_avatar_url?: string | null;
+  target_worker_name?: string | null;
+  previous_worker_name?: string | null;
 }
 
 export type JobWithWorker = Job & {
   worker: WorkerSummary | null;
   events?: JobEventRecord[];
+  eventsError?: string | null;
 };
 
 export interface DashboardSummary {
@@ -87,6 +92,17 @@ export function getLocalDayBoundaries(date: Date = new Date()): {
     startISO: start.toISOString(),
     endISO: nextDay.toISOString(),
   };
+}
+
+/**
+ * Checks whether two dates represent the same calendar day in the local timezone.
+ */
+export function isSameLocalDay(d1: Date, d2: Date = new Date()): boolean {
+  return (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate()
+  );
 }
 
 /**
@@ -233,15 +249,40 @@ export async function fetchOwnerDashboardJobs(
 
   try {
     const { startISO, endISO } = getLocalDayBoundaries(selectedDay);
+    const isToday = isSameLocalDay(selectedDay);
 
-    // 1. Primary Query: Jobs for this business scheduled today OR created today (if unscheduled)
+    // 1. Primary Query:
+    // When viewing "Today":
+    //   - All field active jobs underway right now (on_the_way, arrived, in_progress)
+    //   - All pending jobs scheduled for today or overdue from the past (unassigned, assigned, accepted)
+    //   - All unscheduled pending jobs needing dispatch/assignment
+    //   - Jobs completed today
+    //   - Jobs cancelled today (for summary counts)
+    // When viewing a historical or future calendar day:
+    //   - Jobs scheduled for that specific day
+    //   - Jobs completed on that day
+    //   - Jobs cancelled on that day
+    //   - Unscheduled jobs created on that day
+    const orFilter = isToday
+      ? [
+          'status.in.("on_the_way","arrived","in_progress")',
+          `and(status.in.("unassigned","assigned","accepted"),scheduled_at.lt.${endISO})`,
+          'and(status.in.("unassigned","assigned","accepted"),scheduled_at.is.null)',
+          `and(status.eq.completed,completed_at.gte.${startISO},completed_at.lt.${endISO})`,
+          `and(status.eq.cancelled,cancelled_at.gte.${startISO},cancelled_at.lt.${endISO})`,
+        ].join(',')
+      : [
+          `and(scheduled_at.gte.${startISO},scheduled_at.lt.${endISO})`,
+          `and(status.eq.completed,completed_at.gte.${startISO},completed_at.lt.${endISO})`,
+          `and(status.eq.cancelled,cancelled_at.gte.${startISO},cancelled_at.lt.${endISO})`,
+          `and(scheduled_at.is.null,created_at.gte.${startISO},created_at.lt.${endISO})`,
+        ].join(',');
+
     const { data: rawJobs, error: jobsError } = await supabase
       .from('jobs')
       .select('*')
       .eq('business_id', businessId)
-      .or(
-        `and(scheduled_at.gte.${startISO},scheduled_at.lt.${endISO}),and(scheduled_at.is.null,created_at.gte.${startISO},created_at.lt.${endISO})`
-      )
+      .or(orFilter)
       .order('scheduled_at', { ascending: true, nullsFirst: false });
 
     if (jobsError) {
@@ -455,6 +496,296 @@ export function filterOwnerJobs(
   });
 }
 
+// =============================================================================
+// Owner Job History & Paginated Records (Phase M16)
+// =============================================================================
+
+export type JobHistoryStatusFilter = 'completed' | 'cancelled' | 'all' | JobStatus;
+
+export type JobHistoryDatePreset = 'all' | 'today' | 'past_7_days' | 'past_30_days' | 'this_month';
+
+export interface JobHistoryDateRange {
+  startISO?: string;
+  endISO?: string;
+}
+
+export interface FetchJobHistoryOptions {
+  /** Optional business ID; strictly validated against the caller's authenticated profile */
+  businessId?: string;
+  /** Filter by status. Defaults to 'completed' as preferred historical view */
+  status?: JobHistoryStatusFilter;
+  /** Predefined date filter preset calculated relative to local business calendar */
+  datePreset?: JobHistoryDatePreset;
+  /** Custom ISO timestamp boundaries (takes precedence over datePreset if provided) */
+  customDateRange?: JobHistoryDateRange;
+  /** Maximum number of records per page (default: 20, max: 100) */
+  limit?: number;
+  /** Offset for pagination (default: 0) */
+  offset?: number;
+  /** 1-based page number (alternative to offset; offset = (page - 1) * limit) */
+  page?: number;
+  /** Reference date for local timezone calendar calculation (defaults to device now) */
+  referenceDate?: Date;
+}
+
+export interface JobHistoryResult {
+  jobs: JobWithWorker[];
+  totalCount: number;
+  offset: number;
+  limit: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+  error: string | null;
+}
+
+/**
+ * Calculates start and end ISO timestamps for job history date presets
+ * using local business calendar day boundaries.
+ */
+export function getJobHistoryDateRange(
+  preset: JobHistoryDatePreset,
+  referenceDate: Date = new Date()
+): JobHistoryDateRange {
+  if (preset === 'all') {
+    return {};
+  }
+
+  const now = referenceDate;
+  // Local end-of-day boundary: start of tomorrow (exclusive upper bound)
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+  const endISO = tomorrow.toISOString();
+
+  switch (preset) {
+    case 'today': {
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      return { startISO: todayStart.toISOString(), endISO };
+    }
+    case 'past_7_days': {
+      // Past 7 days including today: 6 days before today at 00:00:00.000 local
+      const sevenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
+      return { startISO: sevenDaysAgo.toISOString(), endISO };
+    }
+    case 'past_30_days': {
+      // Past 30 days including today: 29 days before today at 00:00:00.000 local
+      const thirtyDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29, 0, 0, 0, 0);
+      return { startISO: thirtyDaysAgo.toISOString(), endISO };
+    }
+    case 'this_month': {
+      // 1st of current month at 00:00:00.000 local
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      return { startISO: monthStart.toISOString(), endISO };
+    }
+    default:
+      return {};
+  }
+}
+
+/**
+ * Fetches paginated job history records strictly scoped to the authenticated owner's business.
+ *
+ * Guarantees:
+ * - Authorization: Derives business_id strictly from caller's trusted profile (never trusts client param).
+ * - Deterministic Ordering: Primary sort on relevant timestamp DESC, stable secondary sort on unique id DESC.
+ * - Timestamp Integrity: Completed jobs query and sort authoritatively by actual `completed_at` timestamp.
+ * - Zero N+1 Queries: 1 paginated slice from jobs + 1 batched profile lookup for unique worker IDs.
+ * - Safety: Safely handles null worker_id and optional fields.
+ */
+export async function fetchJobHistory(
+  options: FetchJobHistoryOptions = {}
+): Promise<JobHistoryResult> {
+  const limit = Math.max(1, Math.min(options.limit ?? 20, 100));
+  const offset = options.offset !== undefined
+    ? Math.max(0, options.offset)
+    : options.page !== undefined
+      ? Math.max(0, (options.page - 1) * limit)
+      : 0;
+  const page = Math.floor(offset / limit) + 1;
+
+  const emptyResult: JobHistoryResult = {
+    jobs: [],
+    totalCount: 0,
+    offset,
+    limit,
+    page,
+    pageSize: limit,
+    hasMore: false,
+    error: null,
+  };
+
+  try {
+    // 1. Authoritative Session & Profile Verification (Zero client-supplied trust)
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return {
+        ...emptyResult,
+        error: 'Authentication required to access job history.',
+      };
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, business_id, role, is_active')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !profile) {
+      return {
+        ...emptyResult,
+        error: 'Active profile not found for authenticated user.',
+      };
+    }
+
+    if (profile.role !== 'owner') {
+      return {
+        ...emptyResult,
+        error: 'Only business owners can access job history records.',
+      };
+    }
+
+    if (!profile.is_active) {
+      return {
+        ...emptyResult,
+        error: 'Your user profile is inactive.',
+      };
+    }
+
+    const trustedBusinessId = profile.business_id;
+
+    // Disallow cross-tenant spoofing: if caller explicitly passes a businessId, assert it matches
+    if (options.businessId && options.businessId !== trustedBusinessId) {
+      return {
+        ...emptyResult,
+        error: 'Unauthorized: Business ID does not match authenticated profile.',
+      };
+    }
+
+    // 2. Query Construction
+    const statusFilter = options.status ?? 'completed';
+
+    // Primary timestamp column determination:
+    // - 'completed' uses the actual completion timestamp (completed_at)
+    // - 'cancelled' uses cancelled_at
+    // - other / 'all' uses created_at
+    const timestampCol =
+      statusFilter === 'completed'
+        ? 'completed_at'
+        : statusFilter === 'cancelled'
+          ? 'cancelled_at'
+          : 'created_at';
+
+    let query = supabase
+      .from('jobs')
+      .select('*', { count: 'exact' })
+      .eq('business_id', trustedBusinessId);
+
+    if (statusFilter !== 'all') {
+      query = query.eq('status', statusFilter);
+    }
+
+    // Date range filtering
+    let dateRange: JobHistoryDateRange = {};
+    if (options.customDateRange?.startISO || options.customDateRange?.endISO) {
+      dateRange = options.customDateRange;
+    } else if (options.datePreset && options.datePreset !== 'all') {
+      dateRange = getJobHistoryDateRange(options.datePreset, options.referenceDate);
+    }
+
+    if (dateRange.startISO) {
+      query = query.gte(timestampCol, dateRange.startISO);
+    }
+    if (dateRange.endISO) {
+      query = query.lt(timestampCol, dateRange.endISO);
+    }
+
+    // Deterministic ordering:
+    // Primary sort on the timestamp column (descending, nulls last)
+    // Secondary sort on unique job id (descending) to ensure 100% deterministic pagination
+    query = query
+      .order(timestampCol, { ascending: false, nullsFirst: false })
+      .order('id', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    const { data: rawJobs, error: jobsError, count } = await query;
+
+    if (jobsError) {
+      if (__DEV__) {
+        console.warn('[JobsService] fetchJobHistory query error:', jobsError.message);
+      }
+      return { ...emptyResult, error: jobsError.message };
+    }
+
+    const totalCount = count ?? 0;
+
+    if (!rawJobs || rawJobs.length === 0) {
+      return {
+        ...emptyResult,
+        totalCount,
+        hasMore: false,
+      };
+    }
+
+    // 3. Batched Worker Query: Extract unique assigned worker IDs (Zero N+1 queries)
+    const workerIds = Array.from(
+      new Set(rawJobs.map((j) => j.worker_id).filter((id): id is string => Boolean(id)))
+    );
+
+    const workerMap = new Map<string, WorkerSummary>();
+
+    if (workerIds.length > 0) {
+      const { data: workers, error: workersError } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url, phone')
+        .in('id', workerIds);
+
+      if (workersError) {
+        if (__DEV__) {
+          console.warn('[JobsService] Batched worker lookup warning:', workersError.message);
+        }
+      } else if (workers) {
+        for (const worker of workers) {
+          workerMap.set(worker.id, {
+            id: worker.id,
+            full_name: worker.full_name,
+            avatar_url: worker.avatar_url,
+            phone: worker.phone,
+          });
+        }
+      }
+    }
+
+    // 4. In-memory assembly
+    const jobsWithWorker: JobWithWorker[] = rawJobs.map((job) => ({
+      ...job,
+      worker: job.worker_id ? workerMap.get(job.worker_id) ?? null : null,
+    }));
+
+    const hasMore = offset + rawJobs.length < totalCount;
+
+    return {
+      jobs: jobsWithWorker,
+      totalCount,
+      offset,
+      limit,
+      page,
+      pageSize: limit,
+      hasMore,
+      error: null,
+    };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : 'An unexpected error occurred while loading job history.';
+    if (__DEV__) {
+      console.warn('[JobsService] fetchJobHistory exception:', message);
+    }
+    return { ...emptyResult, error: message };
+  }
+}
+
 export interface AssignableWorker {
   id: string;
   full_name: string;
@@ -546,14 +877,25 @@ export async function fetchAssignableWorkers(
 
     // 2. Query today's active/scheduled assignments for this business
     const { startISO, endISO } = getLocalDayBoundaries(scheduledDate);
+    const isToday = isSameLocalDay(scheduledDate);
+
+    const orFilter = isToday
+      ? [
+          'status.in.("on_the_way","arrived","in_progress")',
+          `and(scheduled_at.gte.${startISO},scheduled_at.lt.${endISO})`,
+          `and(scheduled_at.is.null,created_at.gte.${startISO},created_at.lt.${endISO})`,
+        ].join(',')
+      : [
+          `and(scheduled_at.gte.${startISO},scheduled_at.lt.${endISO})`,
+          `and(scheduled_at.is.null,created_at.gte.${startISO},created_at.lt.${endISO})`,
+        ].join(',');
+
     const { data: dayJobs, error: jobsErr } = await supabase
       .from('jobs')
       .select('id, worker_id, status, scheduled_at')
       .eq('business_id', businessId)
       .not('worker_id', 'is', null)
-      .or(
-        `and(scheduled_at.gte.${startISO},scheduled_at.lt.${endISO}),and(scheduled_at.is.null,created_at.gte.${startISO},created_at.lt.${endISO})`
-      )
+      .or(orFilter)
       .not('status', 'in', '("completed","cancelled")');
 
     if (jobsErr && __DEV__) {
@@ -818,15 +1160,193 @@ export async function fetchJobDetails(
     }
 
     let events: JobEventRecord[] = [];
-    const { data: rawEvents } = await supabase
+    let eventsError: string | null = null;
+    const { events: loadedEvents, error: timelineErr } = await fetchJobEventTimeline(jobId, {
+      businessId,
+      ascending: true,
+    });
+    if (timelineErr) {
+      eventsError = timelineErr;
+    } else if (loadedEvents) {
+      events = loadedEvents;
+    }
+
+    return { job: { ...job, worker, events, eventsError }, error: null };
+  } catch (err) {
+    return {
+      job: null,
+      error: err instanceof Error ? err.message : 'Failed to fetch job details.',
+    };
+  }
+}
+
+export interface FetchJobEventTimelineOptions {
+  businessId?: string;
+  ascending?: boolean;
+  limit?: number;
+}
+
+/**
+ * Fetches the event timeline for a job with resolved actor profile details.
+ * Ordered chronologically (created_at ASC) by default.
+ * Batches profile lookups to eliminate N+1 queries.
+ */
+export async function fetchJobEventTimeline(
+  jobId: string,
+  options: FetchJobEventTimelineOptions = {}
+): Promise<{ events: JobEventRecord[]; error: string | null }> {
+  if (!jobId) {
+    return { events: [], error: 'Job ID is required.' };
+  }
+
+  const ascending = options.ascending ?? true;
+  const limit = Math.max(1, Math.min(options.limit ?? 50, 100));
+
+  try {
+    // 1. Authoritative Session & Profile Verification (Do not trust client param or naked job ID)
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return {
+        events: [],
+        error: 'Authentication required to access job event history.',
+      };
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, business_id, role, is_active')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !profile) {
+      return {
+        events: [],
+        error: 'Active profile not found for authenticated user.',
+      };
+    }
+
+    if (profile.role !== 'owner') {
+      return {
+        events: [],
+        error: 'Only business owners can access job audit timelines.',
+      };
+    }
+
+    if (!profile.is_active) {
+      return {
+        events: [],
+        error: 'Your user profile is inactive.',
+      };
+    }
+
+    const trustedBusinessId = profile.business_id;
+
+    if (options.businessId && options.businessId !== trustedBusinessId) {
+      return {
+        events: [],
+        error: 'Unauthorized: Business ID does not match authenticated profile.',
+      };
+    }
+
+    // 2. Verify that the job exists and belongs to this business
+    const { data: jobCheck, error: jobCheckError } = await supabase
+      .from('jobs')
+      .select('id')
+      .eq('id', jobId)
+      .eq('business_id', trustedBusinessId)
+      .maybeSingle();
+
+    if (jobCheckError) {
+      return { events: [], error: jobCheckError.message };
+    }
+
+    if (!jobCheck) {
+      return { events: [], error: 'Job not found in your business.' };
+    }
+
+    // 3. Query job_events with business isolation & deterministic chronological ordering
+    let query = supabase
       .from('job_events')
       .select('*')
       .eq('job_id', jobId)
-      .eq('business_id', businessId)
-      .order('created_at', { ascending: false });
+      .eq('business_id', trustedBusinessId)
+      .order('created_at', { ascending })
+      .order('id', { ascending })
+      .limit(limit);
 
-    if (rawEvents) {
-      events = rawEvents.map((e) => ({
+    const { data: rawEvents, error: eventsError } = await query;
+
+    if (eventsError) {
+      if (__DEV__) {
+        console.warn('[JobsService] fetchJobEventTimeline error:', eventsError.message);
+      }
+      return { events: [], error: eventsError.message };
+    }
+
+    if (!rawEvents || rawEvents.length === 0) {
+      return { events: [], error: null };
+    }
+
+    // 4. Collect unique profile IDs for batched lookup (zero N+1 queries)
+    const profileIdSet = new Set<string>();
+    for (const e of rawEvents) {
+      if (e.actor_id) profileIdSet.add(e.actor_id);
+      if (e.metadata && typeof e.metadata === 'object') {
+        const meta = e.metadata as Record<string, unknown>;
+        if (typeof meta.worker_id === 'string' && meta.worker_id) profileIdSet.add(meta.worker_id);
+        if (typeof meta.new_worker_id === 'string' && meta.new_worker_id) profileIdSet.add(meta.new_worker_id);
+        if (typeof meta.previous_worker_id === 'string' && meta.previous_worker_id) profileIdSet.add(meta.previous_worker_id);
+        if (typeof meta.initial_worker_id === 'string' && meta.initial_worker_id) profileIdSet.add(meta.initial_worker_id);
+      }
+    }
+
+    const profileIds = Array.from(profileIdSet);
+    const profileMap = new Map<string, { full_name: string; avatar_url: string | null }>();
+
+    if (profileIds.length > 0) {
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url')
+        .in('id', profileIds);
+
+      if (profilesError) {
+        if (__DEV__) {
+          console.warn('[JobsService] Batched profile lookup warning:', profilesError.message);
+        }
+      } else if (profiles) {
+        for (const p of profiles) {
+          profileMap.set(p.id, {
+            full_name: p.full_name,
+            avatar_url: p.avatar_url,
+          });
+        }
+      }
+    }
+
+    // 5. In-memory assembly
+    const events: JobEventRecord[] = rawEvents.map((e) => {
+      const actor = e.actor_id ? profileMap.get(e.actor_id) : undefined;
+      const meta = (e.metadata as Record<string, unknown>) || {};
+
+      const targetWorkerId =
+        typeof meta.worker_id === 'string'
+          ? meta.worker_id
+          : typeof meta.new_worker_id === 'string'
+          ? meta.new_worker_id
+          : typeof meta.initial_worker_id === 'string'
+          ? meta.initial_worker_id
+          : null;
+      const targetWorker = targetWorkerId ? profileMap.get(targetWorkerId) : undefined;
+
+      const prevWorkerId =
+        typeof meta.previous_worker_id === 'string' ? meta.previous_worker_id : null;
+      const prevWorker = prevWorkerId ? profileMap.get(prevWorkerId) : undefined;
+
+      return {
         id: e.id,
         job_id: e.job_id,
         actor_id: e.actor_id,
@@ -834,17 +1354,20 @@ export async function fetchJobDetails(
         event_type: e.event_type,
         previous_status: e.previous_status,
         new_status: e.new_status,
-        metadata: (e.metadata as Record<string, unknown>) || null,
+        metadata: meta,
         created_at: e.created_at,
-      }));
-    }
+        actor_name: actor?.full_name ?? null,
+        actor_avatar_url: actor?.avatar_url ?? null,
+        target_worker_name: targetWorker?.full_name ?? null,
+        previous_worker_name: prevWorker?.full_name ?? null,
+      };
+    });
 
-    return { job: { ...job, worker, events }, error: null };
+    return { events, error: null };
   } catch (err) {
-    return {
-      job: null,
-      error: err instanceof Error ? err.message : 'Failed to fetch job details.',
-    };
+    const message =
+      err instanceof Error ? err.message : 'An unexpected error occurred while loading event timeline.';
+    return { events: [], error: message };
   }
 }
 

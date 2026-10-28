@@ -59,7 +59,10 @@ export function useOwnerLiveMap(): UseOwnerLiveMapResult {
 
   const activeRequestRef = useRef<number>(0);
   const dataRef = useRef<OwnerLiveMapData | null>(null);
-  dataRef.current = data;
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
 
   const loadData = useCallback(
     async (isPullRefresh: boolean = false, isBackground: boolean = false) => {
