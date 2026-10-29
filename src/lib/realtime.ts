@@ -12,26 +12,16 @@
  * - Old channels are cleanly removed via supabase.removeChannel(channel).
  */
 
-import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { notifyJobTransition } from '@/lib/jobs';
 import {
-  buildJobsChannelTopic,
-  buildJobsSubscriptionFilter,
   createManagedJobsSubscriptionCore,
   createReconcileSignal,
-  createSignalDebouncer,
-  JobRealtimeSignal,
   ManagedJobsSubscription,
   ManagedJobsSubscriptionCallbacks,
   notifyJobSignal,
-  parseLocationPostgresPayload,
-  parsePostgresChangePayload,
-  parseProfilePostgresPayload,
-  RealtimeConnectionStatus,
   RealtimeSubscriptionConfig,
-  subscribeToJobSignals,
-  validateSubscriptionContext,
 } from '@/lib/realtime-core';
 import { supabase as defaultSupabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';

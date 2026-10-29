@@ -13,6 +13,8 @@
  * over HTTPS. Coordinates are verified and bounded [-90, 90] / [-180, 180].
  */
 
+import { logger } from './logger';
+
 export interface Coordinates {
   latitude: number;
   longitude: number;
@@ -93,9 +95,7 @@ export async function geocodeAddress(
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      if (__DEV__) {
-        console.warn('[Geocoding] Server responded with status:', response.status);
-      }
+      logger.warn('Geocoding', 'Server responded with status:', response.status);
       geocodeCache.set(cacheKey, null);
       return { coordinates: null, error: `Geocoding HTTP error ${response.status}`, source: 'fallback' };
     }
@@ -135,9 +135,7 @@ export async function geocodeAddress(
     const isAbort = err instanceof Error && (err.name === 'AbortError' || err.message.includes('aborted'));
     const errorMessage = isAbort ? 'Geocoding request timed out (3s).' : 'Network failure during geocoding.';
 
-    if (__DEV__) {
-      console.warn('[Geocoding] Lookup failed:', errorMessage);
-    }
+    logger.warn('Geocoding', 'Lookup failed:', errorMessage);
 
     // Cache null on timeout/error to prevent repeated stalling on retry with identical input
     geocodeCache.set(cacheKey, null);

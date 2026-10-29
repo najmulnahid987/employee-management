@@ -639,35 +639,176 @@ describe('M15.4 Edge Function Webhook HTTP Interface', () => {
     assert.ok(body.error?.includes('Use POST'));
   });
 
-  test('rejects malformed JSON body with HTTP 400', async () => {
-    // Provide env vars for test
-    process.env.SUPABASE_URL = 'http://localhost:54321';
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'mock-service-key';
+  test('fails closed with HTTP 500 when NOTIFICATION_WEBHOOK_SECRET is not configured', async () => {
+    delete process.env.NOTIFICATION_WEBHOOK_SECRET;
+    delete process.env.WEBHOOK_SECRET;
 
     const req = new Request('https://edge.supabase.com/push-notifications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: 'invalid-json{{{',
+      body: JSON.stringify({ record: { id: 'evt-1' } }),
     });
     const res = await handleNotificationWebhookRequest(req);
-    assert.equal(res.status, 400);
+    assert.equal(res.status, 500);
     const body = await res.json();
-    assert.ok(body.error?.includes('Invalid JSON'));
+    assert.ok(body.error?.includes('webhook secret not configured'));
+  });
+
+  test('rejects malformed JSON body with HTTP 400 when authenticated', async () => {
+    process.env.SUPABASE_URL = 'http://localhost:54321';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'mock-service-key';
+    process.env.NOTIFICATION_WEBHOOK_SECRET = 'super-secret-webhook-key-123';
+
+    try {
+      const req = new Request('https://edge.supabase.com/push-notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-webhook-secret': 'super-secret-webhook-key-123',
+        },
+        body: 'invalid-json{{{',
+      });
+      const res = await handleNotificationWebhookRequest(req);
+      assert.equal(res.status, 400);
+      const body = await res.json();
+      assert.ok(body.error?.includes('Invalid JSON'));
+    } finally {
+      delete process.env.NOTIFICATION_WEBHOOK_SECRET;
+    }
   });
 
   test('rejects body missing required job_event record fields with HTTP 400', async () => {
     process.env.SUPABASE_URL = 'http://localhost:54321';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'mock-service-key';
+    process.env.NOTIFICATION_WEBHOOK_SECRET = 'super-secret-webhook-key-123';
 
-    const req = new Request('https://edge.supabase.com/push-notifications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ record: { id: 'evt-1' } }), // missing job_id, business_id, event_type
-    });
-    const res = await handleNotificationWebhookRequest(req);
-    assert.equal(res.status, 400);
-    const body = await res.json();
-    assert.ok(body.error?.includes('Missing required job_event fields'));
+    try {
+      const req = new Request('https://edge.supabase.com/push-notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-webhook-secret': 'super-secret-webhook-key-123',
+        },
+        body: JSON.stringify({ record: { id: 'evt-1' } }), // missing job_id, business_id, event_type
+      });
+      const res = await handleNotificationWebhookRequest(req);
+      assert.equal(res.status, 400);
+      const body = await res.json();
+      assert.ok(body.error?.includes('Missing required job_event fields'));
+    } finally {
+      delete process.env.NOTIFICATION_WEBHOOK_SECRET;
+    }
+  });
+
+  test('rejects oversized request payload exceeding 64KB with HTTP 413', async () => {
+    process.env.SUPABASE_URL = 'http://localhost:54321';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'mock-service-key';
+    process.env.NOTIFICATION_WEBHOOK_SECRET = 'super-secret-webhook-key-123';
+
+    try {
+      const hugeString = 'a'.repeat(65 * 1024);
+      const req = new Request('https://edge.supabase.com/push-notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-webhook-secret': 'super-secret-webhook-key-123',
+        },
+        body: JSON.stringify({ record: { id: hugeString } }),
+      });
+      const res = await handleNotificationWebhookRequest(req);
+      assert.equal(res.status, 413);
+      const body = await res.json();
+      assert.ok(body.error?.includes('Payload too large'));
+    } finally {
+      delete process.env.NOTIFICATION_WEBHOOK_SECRET;
+    }
+  });
+
+  test('rejects non-UUID record identifiers with HTTP 400', async () => {
+    process.env.SUPABASE_URL = 'http://localhost:54321';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'mock-service-key';
+    process.env.NOTIFICATION_WEBHOOK_SECRET = 'super-secret-webhook-key-123';
+
+    try {
+      const req = new Request('https://edge.supabase.com/push-notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-webhook-secret': 'super-secret-webhook-key-123',
+        },
+        body: JSON.stringify({
+          record: {
+            id: 'not-a-valid-uuid',
+            job_id: '11111111-1111-1111-1111-111111111111',
+            business_id: '22222222-2222-2222-2222-222222222222',
+            event_type: 'job_assigned',
+          },
+        }),
+      });
+      const res = await handleNotificationWebhookRequest(req);
+      assert.equal(res.status, 400);
+      const body = await res.json();
+      assert.ok(body.error?.includes('Invalid UUID format'));
+    } finally {
+      delete process.env.NOTIFICATION_WEBHOOK_SECRET;
+    }
+  });
+
+  test('enforces shared webhook secret when NOTIFICATION_WEBHOOK_SECRET is set', async () => {
+    process.env.SUPABASE_URL = 'http://localhost:54321';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'mock-service-key';
+    process.env.NOTIFICATION_WEBHOOK_SECRET = 'super-secret-webhook-key-123';
+
+    try {
+      // 1. Unauthenticated request without secret -> 401
+      const unauthReq = new Request('https://edge.supabase.com/push-notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ record: { id: 'evt-1', job_id: 'job-1', business_id: 'biz-1', event_type: 'job_assigned' } }),
+      });
+      const unauthRes = await handleNotificationWebhookRequest(unauthReq);
+      assert.equal(unauthRes.status, 401);
+      const unauthBody = await unauthRes.json();
+      assert.ok(unauthBody.error?.includes('Unauthorized'));
+
+      // 2. Request with wrong secret -> 401
+      const wrongReq = new Request('https://edge.supabase.com/push-notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-webhook-secret': 'wrong-key',
+        },
+        body: JSON.stringify({ record: { id: 'evt-1', job_id: 'job-1', business_id: 'biz-1', event_type: 'job_assigned' } }),
+      });
+      const wrongRes = await handleNotificationWebhookRequest(wrongReq);
+      assert.equal(wrongRes.status, 401);
+
+      // 3. Request with valid x-webhook-secret header -> passes auth (reaches payload / DB logic)
+      const validHeaderReq = new Request('https://edge.supabase.com/push-notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-webhook-secret': 'super-secret-webhook-key-123',
+        },
+        body: JSON.stringify({ record: { id: 'evt-1' } }), // missing other fields -> returns 400, proving auth passed
+      });
+      const validHeaderRes = await handleNotificationWebhookRequest(validHeaderReq);
+      assert.equal(validHeaderRes.status, 400);
+
+      // 4. Request with valid Bearer Authorization header -> passes auth
+      const validBearerReq = new Request('https://edge.supabase.com/push-notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer super-secret-webhook-key-123',
+        },
+        body: JSON.stringify({ record: { id: 'evt-1' } }), // missing other fields -> returns 400, proving auth passed
+      });
+      const validBearerRes = await handleNotificationWebhookRequest(validBearerReq);
+      assert.equal(validBearerRes.status, 400);
+    } finally {
+      delete process.env.NOTIFICATION_WEBHOOK_SECRET;
+    }
   });
 });
 

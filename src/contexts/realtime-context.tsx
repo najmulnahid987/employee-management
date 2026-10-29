@@ -16,6 +16,7 @@ import React, { createContext, useCallback, useEffect, useMemo, useRef, useState
 import { AppState, AppStateStatus } from 'react-native';
 
 import { useAuth } from '@/hooks/use-auth';
+import { logger } from '@/lib/logger';
 import {
   checkRealtimeHealth,
   computeSubscriptionKey,
@@ -97,9 +98,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       try {
         await sub.unsubscribe();
       } catch (err) {
-        if (__DEV__) {
-          console.warn('[RealtimeProvider] Error during channel teardown:', err);
-        }
+        logger.warn('RealtimeProvider', 'Error during channel teardown:', err);
       }
     }
   }, []);
@@ -156,9 +155,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
     const { valid, reason } = validateSubscriptionContext(config);
     if (!valid) {
-      if (__DEV__) {
-        console.warn('[RealtimeProvider] Invalid subscription context:', reason);
-      }
+      logger.warn('RealtimeProvider', 'Invalid subscription context:', reason);
       if (isMountedRef.current) {
         setStatus('DISCONNECTED');
         setError(reason || 'Invalid context');

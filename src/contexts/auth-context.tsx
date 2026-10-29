@@ -1,10 +1,9 @@
 import type { Session, User } from '@supabase/supabase-js';
-import React, { createContext, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   Business,
   fetchUserBusiness,
-  fetchUserProfile,
   fetchUserProfileDetails,
   getSession,
   onAuthStateChange,
@@ -69,6 +68,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [business, setBusiness] = useState<Business | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const profileRef = useRef<Profile | null>(profile);
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
 
   // Authoritatively derive role and businessId directly from the server-fetched profile
   const role: UserRole | null = useMemo(() => {
@@ -187,7 +191,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(newSession.user);
 
       // On silent token refresh, if profile is already loaded and active, do not block UI or reload
-      if (event === 'TOKEN_REFRESHED' && profile) {
+      if (event === 'TOKEN_REFRESHED' && profileRef.current) {
         setIsLoading(false);
         return;
       }

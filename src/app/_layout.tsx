@@ -1,10 +1,10 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import { router, Stack, useSegments } from 'expo-router';
+import { DarkTheme, DefaultTheme, ErrorBoundaryProps, router, Stack, ThemeProvider, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { AppErrorView } from '@/components/app-error-view';
 import { AuthRecoveryView } from '@/components/auth-recovery-view';
 import { InAppNotificationBanner } from '@/components/in-app-notification-banner';
 import { AuthProvider } from '@/contexts/auth-context';
@@ -12,6 +12,7 @@ import { RealtimeProvider } from '@/contexts/realtime-context';
 import { useAuth } from '@/hooks/use-auth';
 // Register background location task at root module scope
 import '@/lib/background-location-task';
+import { installGlobalErrorHandlers, logger } from '@/lib/logger';
 // Configure notification presentation handler and Android channels at root module scope
 import '@/lib/notifications';
 import {
@@ -20,6 +21,9 @@ import {
   setupNotificationDeepLinking,
 } from '@/lib/notification-navigation';
 import { resolveNotificationRoute } from '@/lib/notification-navigation-core';
+
+// Install global error and promise rejection handlers
+installGlobalErrorHandlers();
 
 SplashScreen.preventAutoHideAsync();
 
@@ -209,3 +213,18 @@ export default function RootLayout() {
   );
 }
 
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  useEffect(() => {
+    logger.error('RootErrorBoundary', 'Unhandled error caught in root boundary:', error);
+  }, [error]);
+
+  return (
+    <AppErrorView
+      error={error}
+      onRetry={retry}
+      onGoHome={() => {
+        router.replace('/');
+      }}
+    />
+  );
+}

@@ -31,6 +31,7 @@ import {
   RawCoordinates,
 } from '@/lib/location-tracker-core';
 import { foregroundLocationTracker } from '@/lib/location-tracker';
+import { logger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 
 export * from '@/lib/background-location-core';
@@ -45,9 +46,7 @@ export async function saveActiveBackgroundTrackingJob(
   try {
     await AsyncStorage.setItem(BACKGROUND_TRACKING_STORAGE_KEY, JSON.stringify(context));
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[BackgroundLocationTask] Failed to save active context:', err);
-    }
+    logger.warn('BackgroundLocationTask', 'Failed to save active context:', err);
   }
 }
 
@@ -59,9 +58,7 @@ export async function getActiveBackgroundTrackingJob(): Promise<ActiveBackground
     const validation = validateBackgroundJobContext(parsed);
     return validation.isValid ? validation.context : null;
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[BackgroundLocationTask] Failed to read active context:', err);
-    }
+    logger.warn('BackgroundLocationTask', 'Failed to read active context:', err);
     return null;
   }
 }
@@ -70,9 +67,7 @@ export async function clearActiveBackgroundTrackingJob(): Promise<void> {
   try {
     await AsyncStorage.removeItem(BACKGROUND_TRACKING_STORAGE_KEY);
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[BackgroundLocationTask] Failed to clear active context:', err);
-    }
+    logger.warn('BackgroundLocationTask', 'Failed to clear active context:', err);
   }
 }
 
@@ -88,9 +83,7 @@ export async function handleBackgroundLocationFixes(
   const context = await getActiveBackgroundTrackingJob();
   if (!context || !isEligibleForBackgroundTracking(context.status)) {
     // Orphaned or stale background task: stop immediately
-    if (__DEV__) {
-      console.log('[BackgroundLocationTask] Stale background task fix received without active context. Stopping.');
-    }
+    logger.info('BackgroundLocationTask', 'Stale background task fix received without active context. Stopping.');
     await stopBackgroundTrackingAsync();
     foregroundLocationTracker.stopTracking();
     return;
@@ -116,9 +109,7 @@ export async function handleBackgroundLocationFixes(
   });
 
   if (!evaluation.shouldSubmit) {
-    if (__DEV__) {
-      console.log(`[BackgroundLocationTask] Fix skipped: ${evaluation.reason}`);
-    }
+    logger.info('BackgroundLocationTask', `Fix skipped: ${evaluation.reason}`);
     return;
   }
 
@@ -132,9 +123,7 @@ export async function handleBackgroundLocationFixes(
     });
 
     if (error) {
-      if (__DEV__) {
-        console.warn('[BackgroundLocationTask] RPC rejected:', error.message);
-      }
+      logger.warn('BackgroundLocationTask', 'RPC rejected:', error.message);
 
       // If the job transitioned or authorization ended, stop background updates immediately
       if (
@@ -154,13 +143,9 @@ export async function handleBackgroundLocationFixes(
     context.lastRecordedCoords = candidate;
     await saveActiveBackgroundTrackingJob(context);
 
-    if (__DEV__) {
-      console.log(`[BackgroundLocationTask] Location recorded in background for ${context.jobId}`);
-    }
+    logger.info('BackgroundLocationTask', `Location recorded in background for job ${context.jobId}`);
   } catch (netErr) {
-    if (__DEV__) {
-      console.warn('[BackgroundLocationTask] Network error in background:', netErr);
-    }
+    logger.warn('BackgroundLocationTask', 'Network error in background:', netErr);
   }
 }
 
@@ -173,9 +158,7 @@ if (!TaskManager.isTaskDefined(DISPATCHER_BACKGROUND_LOCATION_TASK)) {
     DISPATCHER_BACKGROUND_LOCATION_TASK,
     async ({ data, error }: TaskManager.TaskManagerTaskBody<{ locations?: Location.LocationObject[] }>) => {
       if (error) {
-        if (__DEV__) {
-          console.warn('[BackgroundLocationTask] Task error:', error);
-        }
+        logger.warn('BackgroundLocationTask', 'Task error:', error);
         return;
       }
 
@@ -220,18 +203,14 @@ export async function startBackgroundTrackingAsync(
   // 1. Check background permission
   const hasBgPerm = await checkHasBackgroundPermission();
   if (!hasBgPerm) {
-    if (__DEV__) {
-      console.log('[BackgroundLocationTask] Background location permission not granted.');
-    }
+    logger.info('BackgroundLocationTask', 'Background location permission not granted.');
     return false;
   }
 
   // 2. Check location services
   const isServicesEnabled = await Location.hasServicesEnabledAsync();
   if (!isServicesEnabled) {
-    if (__DEV__) {
-      console.log('[BackgroundLocationTask] Location services are disabled on device.');
-    }
+    logger.info('BackgroundLocationTask', 'Location services are disabled on device.');
     return false;
   }
 
@@ -249,18 +228,15 @@ export async function startBackgroundTrackingAsync(
       job.worker_id !== workerId ||
       !isEligibleForBackgroundTracking(job.status)
     ) {
-      if (__DEV__) {
-        console.warn(
-          `[BackgroundLocationTask] Pre-flight failed: job ${jobId} is not active/assigned in database.`
-        );
-      }
+      logger.warn(
+        'BackgroundLocationTask',
+        `Pre-flight failed: job ${jobId} is not active/assigned in database.`
+      );
       await stopBackgroundTrackingAsync();
       return false;
     }
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[BackgroundLocationTask] Pre-flight database check error:', err);
-    }
+    logger.warn('BackgroundLocationTask', 'Pre-flight database check error:', err);
   }
 
   // 4. Check if already configured for the exact same job and status
@@ -308,14 +284,10 @@ export async function startBackgroundTrackingAsync(
     // 8. Register background location task with OS
     await Location.startLocationUpdatesAsync(DISPATCHER_BACKGROUND_LOCATION_TASK, options);
 
-    if (__DEV__) {
-      console.log(`[BackgroundLocationTask] Started background tracking for ${jobId} (${status})`);
-    }
+    logger.info('BackgroundLocationTask', `Started background tracking for ${jobId} (${status})`);
     return true;
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[BackgroundLocationTask] Failed to start background location updates:', err);
-    }
+    logger.warn('BackgroundLocationTask', 'Failed to start background location updates:', err);
     await clearActiveBackgroundTrackingJob();
     return false;
   }
@@ -332,14 +304,10 @@ export async function stopBackgroundTrackingAsync(): Promise<void> {
     );
     if (isRegistered) {
       await Location.stopLocationUpdatesAsync(DISPATCHER_BACKGROUND_LOCATION_TASK);
-      if (__DEV__) {
-        console.log('[BackgroundLocationTask] Background location updates stopped.');
-      }
+      logger.info('BackgroundLocationTask', 'Background location updates stopped.');
     }
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[BackgroundLocationTask] Error stopping location updates:', err);
-    }
+    logger.warn('BackgroundLocationTask', 'Error stopping location updates:', err);
   } finally {
     await clearActiveBackgroundTrackingJob();
   }
@@ -393,9 +361,7 @@ export async function reconcileActiveTrackingSession(
 
     // 2. If unauthenticated or role is not worker: terminate all tracking immediately
     if (!currentUserId || currentUserRole !== 'worker') {
-      if (__DEV__) {
-        console.log('[TrackingReconciliation] Stopping tracking: unauthenticated or non-worker.');
-      }
+      logger.info('TrackingReconciliation', 'Stopping tracking: unauthenticated or non-worker.');
       foregroundLocationTracker.stopTracking();
       await stopBackgroundTrackingAsync();
       return { wasStopped: true, reason: 'Unauthenticated or non-worker session' };
@@ -415,9 +381,7 @@ export async function reconcileActiveTrackingSession(
 
     // 4. Verify context worker matches current authenticated worker
     if (bgContext && bgContext.workerId !== currentUserId) {
-      if (__DEV__) {
-        console.log('[TrackingReconciliation] Stopping tracking: worker mismatch.');
-      }
+      logger.info('TrackingReconciliation', 'Stopping tracking: worker mismatch.');
       foregroundLocationTracker.stopTracking();
       await stopBackgroundTrackingAsync();
       return { wasStopped: true, reason: 'Worker ID mismatch in tracking context' };
@@ -436,11 +400,10 @@ export async function reconcileActiveTrackingSession(
       job.worker_id !== currentUserId ||
       !isEligibleForBackgroundTracking(job.status)
     ) {
-      if (__DEV__) {
-        console.log(
-          `[TrackingReconciliation] Job ${activeJobId} no longer active or assigned (status: ${job?.status}, worker: ${job?.worker_id}). Stopping tracking.`
-        );
-      }
+      logger.info(
+        'TrackingReconciliation',
+        `Job ${activeJobId} no longer active or assigned (status: ${job?.status}). Stopping tracking.`
+      );
       foregroundLocationTracker.stopTracking();
       await stopBackgroundTrackingAsync();
       return {
@@ -457,9 +420,7 @@ export async function reconcileActiveTrackingSession(
 
     return { wasStopped: false };
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[TrackingReconciliation] Error during tracking reconciliation:', err);
-    }
+    logger.warn('TrackingReconciliation', 'Error during tracking reconciliation:', err);
     return { wasStopped: false, reason: err instanceof Error ? err.message : 'Unknown error' };
   }
 }

@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Button, Card, EmptyState, Input, Loading } from '@/components/ui';
+import { Button, EmptyState, Input, Loading } from '@/components/ui';
 import { Palette, Radii, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { AssignableWorker } from '@/lib/jobs';

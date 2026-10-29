@@ -20,6 +20,7 @@ import {
   TRAVEL_TRACKING_PROFILE,
 } from '@/lib/location-tracker-core';
 import { JobStatus } from '@/lib/location-rules';
+import { logger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 
 export * from '@/lib/location-tracker-core';
@@ -80,9 +81,7 @@ export class ForegroundLocationTracker {
       try {
         listener(state);
       } catch (err) {
-        if (__DEV__) {
-          console.warn('[LocationTracker] Listener error:', err);
-        }
+        logger.warn('LocationTracker', 'Listener error:', err);
       }
     });
   }
@@ -199,9 +198,7 @@ export class ForegroundLocationTracker {
       nowTimestampMs: Date.now(),
     });
 
-    if (__DEV__) {
-      console.log(`[LocationTracker] Fix: ${evaluation.reason}`);
-    }
+    logger.info('LocationTracker', `Fix: ${evaluation.reason}`);
 
     if (!evaluation.shouldSubmit) {
       // Inaccuracy warning if above threshold
@@ -241,16 +238,12 @@ export class ForegroundLocationTracker {
 
       // Discard response if tracking stopped or active job changed during in-flight network write
       if (this.activeJobId !== currentJobId || !this.watcherSubscription) {
-        if (__DEV__) {
-          console.log('[LocationTracker] In-flight write discarded: tracking stopped or job switched.');
-        }
+        logger.info('LocationTracker', 'In-flight write discarded: tracking stopped or job switched.');
         return false;
       }
 
       if (error) {
-        if (__DEV__) {
-          console.warn('[LocationTracker] RPC write rejected:', error.message);
-        }
+        logger.warn('LocationTracker', 'RPC write rejected:', error.message);
 
         // If the job transitioned or authorization ended, stop tracking immediately
         if (

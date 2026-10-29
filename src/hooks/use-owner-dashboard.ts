@@ -112,8 +112,9 @@ export function useOwnerDashboard(initialDate: Date = new Date()): UseOwnerDashb
 
   // Clean unmount token invalidation
   useEffect(() => {
+    const reqRef = activeRequestRef;
     return () => {
-      activeRequestRef.current++;
+      reqRef.current++;
     };
   }, []);
 

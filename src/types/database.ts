@@ -611,12 +611,6 @@ export type Database = {
         }
         Returns: Database["public"]["Tables"]["jobs"]["Row"]
       }
-      get_customer_tracking_job: {
-        Args: {
-          p_tracking_token: string
-        }
-        Returns: Json
-      }
       record_worker_location: {
         Args: {
           p_job_id: string

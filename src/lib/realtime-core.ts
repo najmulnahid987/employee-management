@@ -397,7 +397,8 @@ export function notifyJobSignal(signal: JobRealtimeSignal): void {
       listener(signal);
     } catch (err) {
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.warn('[RealtimeCore] Signal listener threw an exception:', err);
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn('[RealtimeCore] Signal listener threw an exception:', msg);
       }
     }
   });
@@ -720,7 +721,8 @@ export function createManagedJobsSubscriptionCore(
         await client.removeChannel(channel);
       } catch (err) {
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
-          console.warn('[RealtimeManager] removeChannel error:', err);
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn('[RealtimeManager] removeChannel error:', msg);
         }
       }
     },

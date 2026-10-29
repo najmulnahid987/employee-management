@@ -117,19 +117,31 @@ export type DbRpcExecutor = (
   params: Record<string, unknown>
 ) => Promise<{ data: unknown; error: unknown }>;
 
+export interface RateLimiterCheckResult {
+  limited: boolean;
+  retryAfterSeconds: number;
+}
+
+export interface IRateLimiter {
+  check(key: string, nowMs?: number): RateLimiterCheckResult | Promise<RateLimiterCheckResult>;
+  reset?(): void;
+}
+
 export interface CustomerTrackingHandlerOptions {
   dbExecutor?: DbRpcExecutor;
-  rateLimiter?: InMemoryRateLimiter;
+  rateLimiter?: IRateLimiter;
+  tokenRateLimiter?: IRateLimiter;
+  distributedRateLimiter?: IRateLimiter;
   nowMsProvider?: () => number;
   supabaseUrl?: string;
   supabaseKey?: string;
 }
 
 // =============================================================================
-// Rate Limiter
+// Rate Limiter Implementations
 // =============================================================================
 
-export class InMemoryRateLimiter {
+export class InMemoryRateLimiter implements IRateLimiter {
   private windows = new Map<string, { count: number; resetAt: number }>();
   private windowMs: number;
   private maxRequests: number;
@@ -139,12 +151,12 @@ export class InMemoryRateLimiter {
     this.maxRequests = maxRequests;
   }
 
-  public check(ip: string, nowMs = Date.now()): { limited: boolean; retryAfterSeconds: number } {
-    const key = ip || 'unknown-client';
-    const record = this.windows.get(key);
+  public check(key: string, nowMs = Date.now()): RateLimiterCheckResult {
+    const bucket = key || 'unknown-client';
+    const record = this.windows.get(bucket);
 
     if (!record || nowMs >= record.resetAt) {
-      this.windows.set(key, { count: 1, resetAt: nowMs + this.windowMs });
+      this.windows.set(bucket, { count: 1, resetAt: nowMs + this.windowMs });
       return { limited: false, retryAfterSeconds: 0 };
     }
 
@@ -162,7 +174,42 @@ export class InMemoryRateLimiter {
   }
 }
 
+export class DatabaseRateLimiter implements IRateLimiter {
+  private dbExecutor: DbRpcExecutor;
+  private maxRequests: number;
+  private windowSeconds: number;
+
+  constructor(dbExecutor: DbRpcExecutor, maxRequests = RATE_LIMIT_MAX_REQUESTS, windowSeconds = 60) {
+    this.dbExecutor = dbExecutor;
+    this.maxRequests = maxRequests;
+    this.windowSeconds = windowSeconds;
+  }
+
+  public async check(key: string): Promise<RateLimiterCheckResult> {
+    try {
+      const { data, error } = await this.dbExecutor('check_rate_limit', {
+        p_bucket_key: key,
+        p_max_requests: this.maxRequests,
+        p_window_seconds: this.windowSeconds,
+      });
+
+      if (error || !data || typeof data !== 'object') {
+        return { limited: false, retryAfterSeconds: 0 };
+      }
+
+      const res = data as { allowed?: boolean; retry_after?: number };
+      const limited = res.allowed === false;
+      const retryAfterSeconds = typeof res.retry_after === 'number' ? res.retry_after : 60;
+
+      return { limited, retryAfterSeconds };
+    } catch {
+      return { limited: false, retryAfterSeconds: 0 };
+    }
+  }
+}
+
 export const globalTrackingRateLimiter = new InMemoryRateLimiter();
+export const globalTokenRateLimiter = new InMemoryRateLimiter(RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS);
 
 // =============================================================================
 // Helper Functions
@@ -170,19 +217,20 @@ export const globalTrackingRateLimiter = new InMemoryRateLimiter();
 
 /**
  * Extracts client IP address from headers safely.
+ * Prioritizes trusted edge proxy headers (cf-connecting-ip, x-real-ip) before client-supplied x-forwarded-for.
  */
 export function extractClientIp(req: Request): string {
+  const cfIp = req.headers.get('cf-connecting-ip');
+  if (cfIp && cfIp.trim().length > 0) return cfIp.trim();
+
+  const realIp = req.headers.get('x-real-ip');
+  if (realIp && realIp.trim().length > 0) return realIp.trim();
+
   const forwardedFor = req.headers.get('x-forwarded-for');
   if (forwardedFor) {
     const firstIp = forwardedFor.split(',')[0].trim();
     if (firstIp) return firstIp;
   }
-
-  const cfIp = req.headers.get('cf-connecting-ip');
-  if (cfIp) return cfIp.trim();
-
-  const realIp = req.headers.get('x-real-ip');
-  if (realIp) return realIp.trim();
 
   return 'unknown-client';
 }
@@ -385,10 +433,10 @@ export function createDefaultDbExecutor(url?: string, key?: string): DbRpcExecut
     const envKey =
       key ||
       (typeof Deno !== 'undefined'
-        ? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY')
+        ? Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
         : null) ||
       (typeof process !== 'undefined'
-        ? process.env?.SUPABASE_SERVICE_ROLE_KEY || process.env?.SUPABASE_ANON_KEY
+        ? process.env?.SUPABASE_ANON_KEY || process.env?.SUPABASE_SERVICE_ROLE_KEY
         : null);
 
     if (!envUrl || !envKey) {
@@ -450,11 +498,11 @@ export async function handleCustomerTrackingRequest(
     );
   }
 
-  // 3. Client IP Extraction & Sliding-Window Rate Limiting
+  // 3. Client IP Extraction & Multi-Layer Rate Limiting
   const rateLimiter = options.rateLimiter || globalTrackingRateLimiter;
   const clientIp = extractClientIp(req);
   const nowMs = options.nowMsProvider ? options.nowMsProvider() : Date.now();
-  const rateLimitStatus = rateLimiter.check(clientIp, nowMs);
+  const rateLimitStatus = await rateLimiter.check(clientIp, nowMs);
 
   if (rateLimitStatus.limited) {
     return createApiResponse(
@@ -465,6 +513,21 @@ export async function handleCustomerTrackingRequest(
       429,
       { 'Retry-After': String(rateLimitStatus.retryAfterSeconds) }
     );
+  }
+
+  // Check optional distributed rate limiter for client IP
+  if (options.distributedRateLimiter) {
+    const distIpStatus = await options.distributedRateLimiter.check(`ip:${clientIp}`, nowMs);
+    if (distIpStatus.limited) {
+      return createApiResponse(
+        {
+          success: false,
+          error: 'Too many requests. Please wait before trying again.',
+        },
+        429,
+        { 'Retry-After': String(distIpStatus.retryAfterSeconds) }
+      );
+    }
   }
 
   // 4. Extract Token from Query, Path, Header, or Body
@@ -491,7 +554,38 @@ export async function handleCustomerTrackingRequest(
     );
   }
 
-  // 6. Execute Authoritative Database Lookup via get_customer_tracking_session_job RPC
+  // 6. Per-Token Abuse Protection
+  const tokenRateLimiter = options.tokenRateLimiter || globalTokenRateLimiter;
+  const tokenKey = `token:${rawToken.slice(0, 16)}`;
+  const tokenLimitStatus = await tokenRateLimiter.check(tokenKey, nowMs);
+
+  if (tokenLimitStatus.limited) {
+    return createApiResponse(
+      {
+        success: false,
+        error: 'Too many requests. Please wait before trying again.',
+      },
+      429,
+      { 'Retry-After': String(tokenLimitStatus.retryAfterSeconds) }
+    );
+  }
+
+  // Check optional distributed rate limiter for token
+  if (options.distributedRateLimiter) {
+    const distTokenStatus = await options.distributedRateLimiter.check(tokenKey, nowMs);
+    if (distTokenStatus.limited) {
+      return createApiResponse(
+        {
+          success: false,
+          error: 'Too many requests. Please wait before trying again.',
+        },
+        429,
+        { 'Retry-After': String(distTokenStatus.retryAfterSeconds) }
+      );
+    }
+  }
+
+  // 7. Execute Authoritative Database Lookup via get_customer_tracking_session_job RPC
   const dbExecutor =
     options.dbExecutor ||
     createDefaultDbExecutor(options.supabaseUrl, options.supabaseKey);
@@ -502,6 +596,22 @@ export async function handleCustomerTrackingRequest(
     });
 
     if (error) {
+      // Check if database returned rate limit exception (code P0004)
+      const errObj = error as { code?: string; message?: string };
+      if (
+        errObj?.code === 'P0004' ||
+        (typeof errObj?.message === 'string' && errObj.message.toLowerCase().includes('rate limit'))
+      ) {
+        return createApiResponse(
+          {
+            success: false,
+            error: 'Too many requests. Please wait before trying again.',
+          },
+          429,
+          { 'Retry-After': '60' }
+        );
+      }
+
       // Return generic 404 without leaking database internals
       return createApiResponse(
         {

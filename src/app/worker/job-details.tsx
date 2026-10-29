@@ -12,7 +12,6 @@ import { useLocationPermission } from '@/hooks/use-location-permission';
 import { useWorkerLocationTracker } from '@/hooks/use-worker-location-tracker';
 import { useTheme } from '@/hooks/use-theme';
 import {
-  acceptJobAssignment,
   declineJobAssignment,
   fetchWorkerJobDetails,
   Job,
@@ -134,8 +133,9 @@ export default function WorkerJobDetailsScreen() {
 
   // Clean unmount token invalidation
   useEffect(() => {
+    const reqRef = activeRequestRef;
     return () => {
-      activeRequestRef.current++;
+      reqRef.current++;
     };
   }, []);
 

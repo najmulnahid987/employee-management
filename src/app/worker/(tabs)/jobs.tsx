@@ -8,7 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Button, Card, EmptyState, Loading, ScreenContainer } from '@/components/ui';
 import { Radii, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { useWorkerJobs, WorkerJobTab } from '@/hooks/use-worker-jobs';
+import { useWorkerJobs } from '@/hooks/use-worker-jobs';
 import { Job } from '@/lib/jobs';
 
 export default function WorkerJobsScreen() {

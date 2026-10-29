@@ -23,7 +23,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { Button, Card, EmptyState } from '@/components/ui';
+import { EmptyState } from '@/components/ui';
 import { Palette, Radii, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { FormattedInAppNotification } from '@/lib/notification-navigation-core';

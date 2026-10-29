@@ -27,6 +27,7 @@ import {
   NotificationPermissionState,
   resolveEasProjectId,
 } from '@/lib/notifications-core';
+import { logger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -47,9 +48,7 @@ try {
     },
   });
 } catch (err) {
-  if (__DEV__) {
-    console.warn('[Notifications] Failed to initialize notification handler:', err);
-  }
+  logger.warn('Notifications', 'Failed to initialize notification handler:', err);
 }
 
 /**
@@ -74,9 +73,7 @@ export async function setupNotificationChannelsAsync(): Promise<void> {
       }
     );
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[Notifications] Failed to configure Android notification channel:', err);
-    }
+    logger.warn('Notifications', 'Failed to configure Android notification channel:', err);
   }
 }
 
@@ -91,9 +88,7 @@ export async function getNotificationPermissionStatusAsync(): Promise<Notificati
     const settings = await Notifications.getPermissionsAsync();
     return normalizeNotificationPermissionStatus(settings.status);
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[Notifications] Failed to query notification permissions:', err);
-    }
+    logger.warn('Notifications', 'Failed to query notification permissions:', err);
     return 'UNDETERMINED';
   }
 }
@@ -116,9 +111,7 @@ export async function requestNotificationPermissionAsync(): Promise<Notification
     });
     return normalizeNotificationPermissionStatus(settings.status);
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[Notifications] Failed to request notification permissions:', err);
-    }
+    logger.warn('Notifications', 'Failed to request notification permissions:', err);
     return 'DENIED';
   }
 }
@@ -160,9 +153,7 @@ export async function registerPushTokenForAuthenticatedUserAsync(): Promise<Devi
 
   // Simulator / emulator limitations: physical push tokens are not issued
   if (!Device.isDevice) {
-    if (__DEV__) {
-      console.log('[Notifications] Running on simulator/emulator; push notifications are disabled.');
-    }
+    logger.info('Notifications', 'Running on simulator/emulator; push notifications are disabled.');
     return { success: false, reason: 'SIMULATOR_NOT_SUPPORTED' };
   }
 
@@ -204,9 +195,7 @@ export async function registerPushTokenForAuthenticatedUserAsync(): Promise<Devi
     });
 
     if (error) {
-      if (__DEV__) {
-        console.warn('[Notifications] Failed to register push token with backend:', error.message);
-      }
+      logger.warn('Notifications', 'Failed to register push token with backend:', error.message);
       return {
         success: false,
         reason: 'REGISTRATION_FAILED',
@@ -218,9 +207,7 @@ export async function registerPushTokenForAuthenticatedUserAsync(): Promise<Devi
     return { success: true, token, id: data?.id };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error acquiring push token';
-    if (__DEV__) {
-      console.warn('[Notifications] Exception acquiring push token:', message);
-    }
+    logger.warn('Notifications', 'Exception acquiring push token:', message);
     return {
       success: false,
       reason: 'TOKEN_UNAVAILABLE',
@@ -248,9 +235,7 @@ export async function deactivateDeviceTokenAsync(
     });
 
     if (error) {
-      if (__DEV__) {
-        console.warn('[Notifications] Failed to deactivate device token:', error.message);
-      }
+      logger.warn('Notifications', 'Failed to deactivate device token:', error.message);
       return false;
     }
 
@@ -259,9 +244,7 @@ export async function deactivateDeviceTokenAsync(
     }
     return Boolean(data);
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[Notifications] Exception deactivating device token:', err);
-    }
+    logger.warn('Notifications', 'Exception deactivating device token:', err);
     return false;
   }
 }
@@ -280,9 +263,7 @@ export function setupPushTokenRefreshListener(
     const subscription = Notifications.addPushTokenListener((devicePushToken) => {
       const newToken = devicePushToken?.data;
       if (newToken && isExpoPushToken(newToken) && newToken !== currentRegisteredPushToken) {
-        if (__DEV__) {
-          console.log('[Notifications] Push token refreshed by system, re-registering...');
-        }
+        logger.info('Notifications', 'Push token refreshed by system, re-registering...');
         registerPushTokenForAuthenticatedUserAsync().catch(() => {});
         onTokenRefresh?.(newToken);
       }
@@ -294,9 +275,7 @@ export function setupPushTokenRefreshListener(
       },
     };
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[Notifications] Failed to attach push token refresh listener:', err);
-    }
+    logger.warn('Notifications', 'Failed to attach push token refresh listener:', err);
     return { unsubscribe: () => {} };
   }
 }

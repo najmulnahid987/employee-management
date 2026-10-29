@@ -64,6 +64,27 @@ export default function OwnerProfileScreen() {
           </ThemedText>
         </Card>
 
+        <Card
+          variant="surface"
+          style={styles.card}
+          onPress={() => router.push('/owner/billing')}
+          testID="profile-billing-card">
+          <View style={styles.billingRow}>
+            <View style={styles.billingTextContainer}>
+              <ThemedText type="headline">Billing</ThemedText>
+              <ThemedText type="body" themeColor="textSecondary">
+                Manage your Dispatcher plan and view subscription options.
+              </ThemedText>
+            </View>
+            <Button
+              label="View Plan"
+              variant="secondary"
+              size="sm"
+              onPress={() => router.push('/owner/billing')}
+            />
+          </View>
+        </Card>
+
         <Button
           label="Sign Out"
           variant="outline"
@@ -89,6 +110,16 @@ const styles = StyleSheet.create({
   card: {
     padding: Spacing.base,
     gap: Spacing.xs,
+  },
+  billingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  billingTextContainer: {
+    flex: 1,
+    gap: Spacing.xxs,
   },
   signOutButton: {
     marginTop: Spacing.md,

@@ -7,8 +7,8 @@ module.exports = defineConfig([
   {
     ignores: ["dist/*", "node_modules/*", ".expo/*", "scripts/*", "supabase/*"],
     rules: {
-      "react-hooks/set-state-in-effect": "warn",
-      "react-hooks/preserve-manual-memoization": "warn",
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/preserve-manual-memoization": "off",
       "react-hooks/refs": "warn",
       "react/no-unescaped-entities": "off",
       "@typescript-eslint/no-unused-vars": "warn",

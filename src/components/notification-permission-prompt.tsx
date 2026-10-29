@@ -17,7 +17,6 @@ import { StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card } from '@/components/ui';
 import { Palette, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
 import {
   NOTIFICATION_PERMISSION_EXPLANATION,
   NotificationPermissionState,
@@ -35,7 +34,6 @@ export interface NotificationPermissionPromptProps {
 export function NotificationPermissionPrompt({
   onPermissionChange,
 }: NotificationPermissionPromptProps) {
-  const theme = useTheme();
   const [isVisible, setIsVisible] = useState<boolean>(false);
   const [isRequesting, setIsRequesting] = useState<boolean>(false);
 

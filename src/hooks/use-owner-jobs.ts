@@ -100,8 +100,9 @@ export function useOwnerJobs(): UseOwnerJobsReturn {
 
   // Clean unmount token invalidation
   useEffect(() => {
+    const reqRef = activeRequestRef;
     return () => {
-      activeRequestRef.current++;
+      reqRef.current++;
     };
   }, []);
 

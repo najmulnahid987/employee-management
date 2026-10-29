@@ -11,7 +11,7 @@
 // Declare Deno runtime global for TypeScript compilers outside Deno
 declare const Deno: any;
 
-import { handleCustomerTrackingRequest } from './core';
+import { handleCustomerTrackingRequest } from './core.ts';
 
 // @ts-ignore - Deno global available in Supabase Edge Runtime
 if (typeof Deno !== 'undefined' && typeof Deno.serve === 'function') {

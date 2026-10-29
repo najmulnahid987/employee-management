@@ -11,6 +11,7 @@ import {
   LOCATION_PERMISSION_EXPLANATION,
   LocationPermissionStatusResult,
 } from './location-policy-core';
+import { logger } from './logger';
 
 export * from './location-policy-core';
 
@@ -69,9 +70,7 @@ export async function checkLocationPermissionStatus(): Promise<LocationPermissio
       details: 'Location access is restricted by device policy.',
     };
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[LocationPolicy] checkLocationPermissionStatus error:', err);
-    }
+    logger.warn('LocationPolicy', 'checkLocationPermissionStatus error:', err);
     return {
       state: 'RESTRICTED',
       isLocationServicesEnabled: true,
@@ -119,9 +118,7 @@ export async function requestForegroundLocationPermission(): Promise<LocationPer
       details: LOCATION_PERMISSION_EXPLANATION.deniedNotice,
     };
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[LocationPolicy] requestForegroundLocationPermission error:', err);
-    }
+    logger.warn('LocationPolicy', 'requestForegroundLocationPermission error:', err);
     return {
       state: 'DENIED',
       isLocationServicesEnabled: true,
@@ -173,9 +170,7 @@ export async function checkBackgroundLocationPermissionStatus(): Promise<Locatio
       details: 'Background location permission is not granted.',
     };
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[LocationPolicy] checkBackgroundLocationPermissionStatus error:', err);
-    }
+    logger.warn('LocationPolicy', 'checkBackgroundLocationPermissionStatus error:', err);
     return {
       state: 'RESTRICTED',
       isLocationServicesEnabled: true,
@@ -233,9 +228,7 @@ export async function requestBackgroundLocationPermission(): Promise<LocationPer
       details: 'Background location permission was not granted.',
     };
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[LocationPolicy] requestBackgroundLocationPermission error:', err);
-    }
+    logger.warn('LocationPolicy', 'requestBackgroundLocationPermission error:', err);
     return {
       state: 'DENIED',
       isLocationServicesEnabled: true,

@@ -138,8 +138,9 @@ export function useOwnerLiveMap(): UseOwnerLiveMapResult {
 
   // Clean teardown: invalidate in-flight network requests on unmount
   useEffect(() => {
+    const reqRef = activeRequestRef;
     return () => {
-      activeRequestRef.current++;
+      reqRef.current++;
     };
   }, []);
 

@@ -13,7 +13,7 @@
 // Declare Deno runtime global for TypeScript compilers outside Deno
 declare const Deno: any;
 
-import { handleNotificationWebhookRequest } from './core';
+import { handleNotificationWebhookRequest } from './core.ts';
 
 // Supabase Edge Runtime Entrypoint
 // @ts-ignore - Deno global available in Supabase Edge Runtime

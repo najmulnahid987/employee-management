@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Linking, Platform, RefreshControl, Share, StyleSheet, View } from 'react-native';
+import { Alert, Platform, RefreshControl, Share, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Loading, ScreenContainer, StatusBadge } from '@/components/ui';
@@ -26,7 +26,6 @@ import { subscribeToJobSignals } from '@/lib/realtime';
 import {
   buildFullTrackingUrl,
   generateTrackingSession,
-  isJobEligibleForTrackingIssuance,
   IssuedTrackingSession,
   revokeTrackingSession,
 } from '@/lib/tracking-session-service';
@@ -106,8 +105,9 @@ export default function OwnerJobDetailsScreen() {
 
   // Clean unmount token invalidation
   useEffect(() => {
+    const reqRef = activeRequestRef;
     return () => {
-      activeRequestRef.current++;
+      reqRef.current++;
     };
   }, []);
 
@@ -302,7 +302,7 @@ export default function OwnerJobDetailsScreen() {
     if (job && (job.status === 'completed' || job.status === 'cancelled' || job.status === 'unassigned' || !job.worker_id)) {
       setTrackingSession(null);
     }
-  }, [job?.status, job?.worker_id]);
+  }, [job]);
 
   const handleCreateTrackingLink = async () => {
     if (!job || actionLockRef.current) return;

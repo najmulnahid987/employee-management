@@ -20,7 +20,7 @@ import { LiveMapBottomSheet } from '@/components/map/live-map-bottom-sheet';
 import { LiveMapViewport } from '@/components/map/live-map-viewport';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, EmptyState, Loading, ScreenContainer, StatusBadge } from '@/components/ui';
-import { JobStatus, Palette, Radii, Spacing } from '@/constants/theme';
+import { Palette, Radii, Spacing } from '@/constants/theme';
 import { useOwnerLiveMap } from '@/hooks/use-owner-live-map';
 import { useTheme } from '@/hooks/use-theme';
 import { launchNativeMaps } from '@/lib/launchers';

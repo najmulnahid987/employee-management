@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Input, Loading, ScreenContainer } from '@/components/ui';
@@ -20,11 +20,6 @@ export default function OwnerBusinessSetupScreen() {
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [formLoading, setFormLoading] = useState(false);
-
-  // Focus navigation refs
-  const businessNameRef = useRef<TextInput>(null);
-  const phoneRef = useRef<TextInput>(null);
-  const addressRef = useRef<TextInput>(null);
 
   // Guard: If unauthenticated, redirect to sign-in. If already provisioned, route to appropriate shell.
   useEffect(() => {

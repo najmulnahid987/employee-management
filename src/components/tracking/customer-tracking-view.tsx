@@ -36,13 +36,11 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import {
-  Colors,
   JobStatus,
   Palette,
   Radii,
   Shadows,
   Spacing,
-  TouchTarget,
   Typography,
 } from '@/constants/theme';
 import {

@@ -329,10 +329,8 @@ export function CustomerTrackingMap({
     };
   }, [workerLocation, destination, status, isStale, workerFirstName]);
 
-  // Initial HTML string for iframe
-  const initialHtml = useMemo(() => {
-    return buildMapHtml(telemetryPayload);
-  }, []); // Only compute once on mount
+  // Initial HTML string for iframe (lazy initialized once on mount)
+  const [initialHtml] = useState(() => buildMapHtml(telemetryPayload));
 
   // Post updates to iframe when coordinates, status, or freshness change
   useEffect(() => {

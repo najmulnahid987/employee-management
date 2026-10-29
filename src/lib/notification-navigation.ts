@@ -13,7 +13,6 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import {
-  ApprovedNotificationType,
   ForegroundNotificationAlert,
   formatInAppNotification,
   FormattedInAppNotification,
@@ -23,6 +22,7 @@ import {
   RawDeliveryRecord,
   resumePendingNotificationNavigation,
 } from '@/lib/notification-navigation-core';
+import { logger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 
 export {
@@ -54,9 +54,7 @@ export function setupNotificationDeepLinking(
         }
       })
       .catch((err) => {
-        if (__DEV__) {
-          console.warn('[Notifications] Error inspecting cold-start notification:', err);
-        }
+        logger.warn('Notifications', 'Error inspecting cold-start notification:', err);
       });
 
     // 2. Warm-start listener: Notification tapped while app is in background or active
@@ -80,9 +78,7 @@ export function setupNotificationDeepLinking(
     });
     subscriptions.push(receivedSub);
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[Notifications] Failed to setup notification deep linking listeners:', err);
-    }
+    logger.warn('Notifications', 'Failed to setup notification deep linking listeners:', err);
   }
 
   return {
@@ -119,8 +115,8 @@ export async function fetchUserInAppNotifications(): Promise<FormattedInAppNotif
       .limit(20);
 
     if (error || !Array.isArray(data)) {
-      if (__DEV__ && error) {
-        console.warn('[Notifications] Error fetching in-app notifications:', error.message);
+      if (error) {
+        logger.warn('Notifications', 'Error fetching in-app notifications:', error.message);
       }
       return [];
     }
@@ -129,9 +125,7 @@ export async function fetchUserInAppNotifications(): Promise<FormattedInAppNotif
       .map((row) => formatInAppNotification(row))
       .filter((item): item is FormattedInAppNotification => item !== null);
   } catch (err) {
-    if (__DEV__) {
-      console.warn('[Notifications] Exception fetching in-app notifications:', err);
-    }
+    logger.warn('Notifications', 'Exception fetching in-app notifications:', err);
     return [];
   }
 }

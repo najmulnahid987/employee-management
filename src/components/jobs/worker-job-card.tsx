@@ -4,7 +4,6 @@ import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Card, StatusBadge } from '@/components/ui';
 import { JobStatus, Palette, Radii, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
 import { formatScheduledTime, Job } from '@/lib/jobs';
 
 export interface WorkerJobCardProps {
@@ -16,8 +15,6 @@ export interface WorkerJobCardProps {
 }
 
 export function WorkerJobCard({ job, onPress, style, testID, isHero }: WorkerJobCardProps) {
-  const theme = useTheme();
-
   const handlePress = onPress ? () => onPress(job) : undefined;
   const scheduledTimeStr = formatScheduledTime(job.scheduled_at);
   const isAssignedPending = job.status === 'assigned';

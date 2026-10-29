@@ -695,14 +695,14 @@ export interface FetchOwnerLiveMapOptions {
 }
 
 export interface ComposeOwnerLiveMapParams {
-  workerProfiles: Array<{
+  workerProfiles: {
     id: string;
     full_name: string;
     avatar_url: string | null;
     phone: string | null;
     is_active: boolean;
-  }>;
-  rawJobs: Array<{
+  }[];
+  rawJobs: {
     id: string;
     worker_id: string | null;
     customer_name?: string;
@@ -713,8 +713,8 @@ export interface ComposeOwnerLiveMapParams {
     longitude: number | null;
     scheduled_at: string | null;
     updated_at?: string;
-  }>;
-  rawLocations: Array<{
+  }[];
+  rawLocations: {
     id: string;
     worker_id: string;
     job_id: string | null;
@@ -722,7 +722,7 @@ export interface ComposeOwnerLiveMapParams {
     longitude: number;
     accuracy: number | null;
     created_at: string;
-  }>;
+  }[];
   options?: FetchOwnerLiveMapOptions;
 }
 

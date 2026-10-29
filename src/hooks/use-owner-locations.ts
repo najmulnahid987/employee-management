@@ -117,8 +117,9 @@ export function useOwnerLocations(): UseOwnerLocationsResult {
 
   // Invalidate tokens on unmount
   useEffect(() => {
+    const reqRef = activeRequestRef;
     return () => {
-      activeRequestRef.current++;
+      reqRef.current++;
     };
   }, []);
 

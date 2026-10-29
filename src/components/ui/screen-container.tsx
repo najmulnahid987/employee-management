@@ -18,7 +18,7 @@ export interface ScreenContainerProps {
   withPadding?: boolean;
   style?: StyleProp<ViewStyle>;
   contentContainerStyle?: StyleProp<ViewStyle>;
-  edges?: Array<'top' | 'bottom' | 'left' | 'right'>;
+  edges?: ('top' | 'bottom' | 'left' | 'right')[];
   refreshControl?: ScrollViewProps['refreshControl'];
 }
 

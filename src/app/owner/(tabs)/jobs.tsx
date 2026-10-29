@@ -13,7 +13,7 @@ import { JobCard } from '@/components/jobs/job-card';
 import { RealtimeStatusBanner } from '@/components/realtime-status-banner';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, EmptyState, Input, Loading, ScreenContainer } from '@/components/ui';
-import { Palette, Radii, Spacing } from '@/constants/theme';
+import { Radii, Spacing } from '@/constants/theme';
 import { useOwnerJobs } from '@/hooks/use-owner-jobs';
 import { useTheme } from '@/hooks/use-theme';
 import { JobWithWorker, OwnerJobFilter } from '@/lib/jobs';

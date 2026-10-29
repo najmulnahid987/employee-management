@@ -63,6 +63,10 @@ export default function OwnerLayout() {
         name="job-history"
         options={{ title: 'Job History', headerBackTitle: 'Jobs' }}
       />
+      <Stack.Screen
+        name="billing"
+        options={{ title: 'Billing', headerBackTitle: 'Profile' }}
+      />
     </Stack>
   );
 }

@@ -961,8 +961,53 @@ export function createProductionDependencies(
 export const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, x-client-info',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, x-client-info, x-webhook-secret',
 };
+
+/**
+ * Validates an incoming webhook request against an expected shared secret.
+ * Inspects 'x-webhook-secret' header and 'Authorization: Bearer <secret>'.
+ */
+export const MAX_WEBHOOK_BODY_BYTES = 64 * 1024; // 64 KB
+
+function timingSafeEqualStr(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+export function validateWebhookSecret(
+  req: Request,
+  expectedSecret?: string | null
+): boolean {
+  if (!expectedSecret || expectedSecret.trim().length === 0) {
+    return false; // Fail-closed: missing secret is NEVER valid
+  }
+
+  const cleanExpected = expectedSecret.trim();
+
+  const customHeader = req.headers.get('x-webhook-secret')?.trim();
+  if (customHeader && timingSafeEqualStr(customHeader, cleanExpected)) {
+    return true;
+  }
+
+  const authHeader = req.headers.get('Authorization') || req.headers.get('authorization');
+  if (authHeader) {
+    const bearerToken = authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7).trim()
+      : authHeader.trim();
+    if (timingSafeEqualStr(bearerToken, cleanExpected)) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 export async function handleNotificationWebhookRequest(req: Request): Promise<Response> {
   // 1. CORS Preflight
@@ -981,7 +1026,36 @@ export async function handleNotificationWebhookRequest(req: Request): Promise<Re
     });
   }
 
-  // 3. Environment Configuration
+  // 3. Webhook Authentication / Secret Validation (Fail-Closed)
+  const webhookSecret =
+    (typeof Deno !== 'undefined'
+      ? Deno.env.get('NOTIFICATION_WEBHOOK_SECRET') || Deno.env.get('WEBHOOK_SECRET')
+      : null) ||
+    (typeof process !== 'undefined'
+      ? process.env?.NOTIFICATION_WEBHOOK_SECRET || process.env?.WEBHOOK_SECRET
+      : null);
+
+  if (!webhookSecret || webhookSecret.trim().length === 0) {
+    return new Response(
+      JSON.stringify({ error: 'Server configuration error: webhook secret not configured.' }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+      }
+    );
+  }
+
+  if (!validateWebhookSecret(req, webhookSecret)) {
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized: Invalid or missing webhook secret.' }),
+      {
+        status: 401,
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+      }
+    );
+  }
+
+  // 4. Environment Configuration
   const supabaseUrl =
     (typeof Deno !== 'undefined' ? Deno.env.get('SUPABASE_URL') : null) ||
     (typeof process !== 'undefined' ? process.env?.SUPABASE_URL : null);
@@ -1004,10 +1078,41 @@ export async function handleNotificationWebhookRequest(req: Request): Promise<Re
     );
   }
 
-  // 4. Parse Webhook Payload
+  // 5. Parse Webhook Payload with Size Limits
+  const contentLength = req.headers.get('content-length');
+  if (contentLength && parseInt(contentLength, 10) > MAX_WEBHOOK_BODY_BYTES) {
+    return new Response(
+      JSON.stringify({ error: 'Payload too large. Maximum size is 64KB.' }),
+      {
+        status: 413,
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+      }
+    );
+  }
+
+  let rawBodyText: string;
+  try {
+    rawBodyText = await req.text();
+  } catch {
+    return new Response(JSON.stringify({ error: 'Failed to read request body.' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+    });
+  }
+
+  if (new TextEncoder().encode(rawBodyText).length > MAX_WEBHOOK_BODY_BYTES) {
+    return new Response(
+      JSON.stringify({ error: 'Payload too large. Maximum size is 64KB.' }),
+      {
+        status: 413,
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+      }
+    );
+  }
+
   let body: any;
   try {
-    body = await req.json();
+    body = JSON.parse(rawBodyText);
   } catch {
     return new Response(JSON.stringify({ error: 'Invalid JSON body.' }), {
       status: 400,
@@ -1031,7 +1136,25 @@ export async function handleNotificationWebhookRequest(req: Request): Promise<Re
     );
   }
 
-  // 5. Execute Core Pipeline
+  // Strict UUID validation on critical relational identifiers
+  const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+  if (
+    !UUID_REGEX.test(record.id) ||
+    !UUID_REGEX.test(record.job_id) ||
+    !UUID_REGEX.test(record.business_id)
+  ) {
+    return new Response(
+      JSON.stringify({
+        error: 'Invalid UUID format for required job_event fields (id, job_id, business_id).',
+      }),
+      {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+      }
+    );
+  }
+
+  // 6. Execute Core Pipeline with Sanitized Error Response
   try {
     const deps = createProductionDependencies(supabaseUrl, serviceRoleKey);
     const result = await processNotificationEvent(record, deps, expoAccessToken);
@@ -1040,12 +1163,14 @@ export async function handleNotificationWebhookRequest(req: Request): Promise<Re
       status: 200,
       headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
     });
-  } catch (err: any) {
-    const message = err instanceof Error ? err.message : String(err);
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
-    });
+  } catch {
+    return new Response(
+      JSON.stringify({ error: 'Internal server error processing notification event.' }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+      }
+    );
   }
 }
 

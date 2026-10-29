@@ -1,5 +1,6 @@
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 
+import { logger, sanitizeString } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
 
@@ -86,7 +87,18 @@ export function sanitizeAuthError(error: unknown): string {
     return 'Unable to reach authentication service. Please check your internet connection.';
   }
 
-  return message;
+  // Prevent leaking internal SQL syntax or database errors to users
+  if (
+    message.includes('relation "') ||
+    message.includes('constraint "') ||
+    message.includes('42501') ||
+    message.includes('syntax error') ||
+    message.includes('schema "')
+  ) {
+    return 'A server error occurred while verifying your account. Please try again.';
+  }
+
+  return sanitizeString(message) || 'An unexpected authentication error occurred.';
 }
 
 /**
@@ -236,18 +248,14 @@ export async function fetchUserProfileDetails(userId: string): Promise<ProfileFe
       .maybeSingle();
 
     if (error) {
-      if (__DEV__) {
-        console.warn('[Auth] Failed to load profile for user:', error.message);
-      }
+      logger.warn('Auth', 'Failed to load profile for user:', error.message);
       return { profile: null, error: error.message };
     }
 
     return { profile: data, error: null };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Network failure loading profile';
-    if (__DEV__) {
-      console.warn('[Auth] Exception while loading profile:', message);
-    }
+    logger.warn('Auth', 'Exception while loading profile:', message);
     return { profile: null, error: message };
   }
 }

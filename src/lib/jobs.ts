@@ -17,6 +17,7 @@ import {
   JobStatus,
   WORKER_STATUS_PRIORITY,
 } from '@/lib/lifecycle';
+import { logger, sanitizeString, toUserFacingErrorMessage } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import type { Database } from '@/types/database';
 
@@ -286,10 +287,8 @@ export async function fetchOwnerDashboardJobs(
       .order('scheduled_at', { ascending: true, nullsFirst: false });
 
     if (jobsError) {
-      if (__DEV__) {
-        console.warn('[DashboardService] Failed to load jobs:', jobsError.message);
-      }
-      return { ...emptyResult, error: jobsError.message };
+      logger.warn('DashboardService', 'Failed to load jobs:', jobsError.message);
+      return { ...emptyResult, error: toUserFacingErrorMessage(jobsError) };
     }
 
     if (!rawJobs || rawJobs.length === 0) {
@@ -310,9 +309,7 @@ export async function fetchOwnerDashboardJobs(
         .in('id', workerIds);
 
       if (workersError) {
-        if (__DEV__) {
-          console.warn('[DashboardService] Batched worker lookup warning:', workersError.message);
-        }
+        logger.warn('DashboardService', 'Batched worker lookup warning:', workersError.message);
       } else if (workers) {
         for (const worker of workers) {
           workerMap.set(worker.id, {
@@ -341,10 +338,8 @@ export async function fetchOwnerDashboardJobs(
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'An unexpected error occurred while loading operations.';
-    if (__DEV__) {
-      console.warn('[DashboardService] Exception loading dashboard:', message);
-    }
-    return { ...emptyResult, error: message };
+    logger.warn('DashboardService', 'Exception loading dashboard:', message);
+    return { ...emptyResult, error: toUserFacingErrorMessage(err, message) };
   }
 }
 
@@ -361,7 +356,8 @@ export interface OwnerJobsListData {
  * Zero N+1 queries for worker details.
  */
 export async function fetchOwnerJobsList(
-  businessId: string
+  businessId: string,
+  limit: number = 100
 ): Promise<OwnerJobsListData> {
   const emptyResult: OwnerJobsListData = {
     jobs: [],
@@ -373,18 +369,17 @@ export async function fetchOwnerJobsList(
   }
 
   try {
-    // 1. Primary Query: All jobs for this business ordered with most recently created on top
+    // 1. Primary Query: All jobs for this business ordered with most recently created on top (bounded)
     const { data: rawJobs, error: jobsError } = await supabase
       .from('jobs')
       .select('*')
       .eq('business_id', businessId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(Math.min(Math.max(1, limit), 250));
 
     if (jobsError) {
-      if (__DEV__) {
-        console.warn('[JobsService] fetchOwnerJobsList error:', jobsError.message);
-      }
-      return { ...emptyResult, error: jobsError.message };
+      logger.warn('JobsService', 'fetchOwnerJobsList error:', jobsError.message);
+      return { ...emptyResult, error: toUserFacingErrorMessage(jobsError) };
     }
 
     if (!rawJobs || rawJobs.length === 0) {
@@ -405,9 +400,7 @@ export async function fetchOwnerJobsList(
         .in('id', workerIds);
 
       if (workersError) {
-        if (__DEV__) {
-          console.warn('[JobsService] Batched worker lookup warning:', workersError.message);
-        }
+        logger.warn('JobsService', 'Batched worker lookup warning:', workersError.message);
       } else if (workers) {
         for (const worker of workers) {
           workerMap.set(worker.id, {
@@ -432,10 +425,8 @@ export async function fetchOwnerJobsList(
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'An unexpected error occurred while loading jobs.';
-    if (__DEV__) {
-      console.warn('[JobsService] Exception loading owner jobs list:', message);
-    }
-    return { ...emptyResult, error: message };
+    logger.warn('JobsService', 'Exception loading owner jobs list:', message);
+    return { ...emptyResult, error: toUserFacingErrorMessage(err, message) };
   }
 }
 
@@ -713,10 +704,8 @@ export async function fetchJobHistory(
     const { data: rawJobs, error: jobsError, count } = await query;
 
     if (jobsError) {
-      if (__DEV__) {
-        console.warn('[JobsService] fetchJobHistory query error:', jobsError.message);
-      }
-      return { ...emptyResult, error: jobsError.message };
+      logger.warn('JobsService', 'fetchJobHistory query error:', jobsError.message);
+      return { ...emptyResult, error: toUserFacingErrorMessage(jobsError) };
     }
 
     const totalCount = count ?? 0;
@@ -743,9 +732,7 @@ export async function fetchJobHistory(
         .in('id', workerIds);
 
       if (workersError) {
-        if (__DEV__) {
-          console.warn('[JobsService] Batched worker lookup warning:', workersError.message);
-        }
+        logger.warn('JobsService', 'Batched worker lookup warning:', workersError.message);
       } else if (workers) {
         for (const worker of workers) {
           workerMap.set(worker.id, {
@@ -779,10 +766,8 @@ export async function fetchJobHistory(
   } catch (err) {
     const message =
       err instanceof Error ? err.message : 'An unexpected error occurred while loading job history.';
-    if (__DEV__) {
-      console.warn('[JobsService] fetchJobHistory exception:', message);
-    }
-    return { ...emptyResult, error: message };
+    logger.warn('JobsService', 'fetchJobHistory exception:', message);
+    return { ...emptyResult, error: toUserFacingErrorMessage(err, message) };
   }
 }
 
@@ -843,7 +828,17 @@ function sanitizeJobError(error: unknown): string {
     return 'Network connection error. Please check your connection and retry.';
   }
 
-  return msg || 'Failed to save job. Please try again.';
+  // Prevent leaking internal SQL syntax or database errors to users
+  if (
+    msg.includes('relation "') ||
+    msg.includes('constraint "') ||
+    msg.includes('syntax error') ||
+    msg.includes('column "')
+  ) {
+    return 'Failed to save job due to a server validation error. Please try again.';
+  }
+
+  return sanitizeString(msg) || 'Failed to save job. Please try again.';
 }
 
 /**
@@ -898,8 +893,8 @@ export async function fetchAssignableWorkers(
       .or(orFilter)
       .not('status', 'in', '("completed","cancelled")');
 
-    if (jobsErr && __DEV__) {
-      console.warn('[JobsService] Workload query warning:', jobsErr.message);
+    if (jobsErr) {
+      logger.warn('JobsService', 'Workload query warning:', jobsErr.message);
     }
 
     // 3. In-memory aggregation per worker
@@ -1016,11 +1011,8 @@ export interface CreateJobResult {
 /**
  * Creates a new service job and optionally assigns a worker.
  *
- * Execution Strategy:
- * 1. Attempts the atomic server-side RPC `create_job` (created in migration 20261025000000).
- * 2. If the RPC is not yet applied on remote database (code PGRST202), gracefully falls back to:
- *    - Step A: Insert unassigned job via `supabase.from('jobs').insert(...)`.
- *    - Step B: If worker selected, call verified RPC `assign_job_worker(job.id, workerId)`.
+ * Atomically executed via server-side create_job RPC with row validation,
+ * role verification, and append-only event logging.
  */
 export async function createJob(params: CreateJobParams): Promise<CreateJobResult> {
   const trimmedName = params.customerName.trim();
@@ -1049,66 +1041,15 @@ export async function createJob(params: CreateJobParams): Promise<CreateJobResul
       p_longitude: params.longitude ?? null,
     });
 
-    if (!rpcError && rpcData) {
-      return { success: true, job: rpcData };
-    }
-
-    // If RPC failed due to anything other than missing function, report sanitized error
-    const isFunctionMissing =
-      rpcError?.code === 'PGRST202' ||
-      (typeof rpcError?.message === 'string' && rpcError.message.includes('function public.create_job'));
-
-    if (rpcError && !isFunctionMissing) {
+    if (rpcError) {
       return { success: false, error: sanitizeJobError(rpcError) };
     }
 
-    // 2. Fallback: 2-step orchestration with existing baseline policies
-    if (__DEV__) {
-      console.log('[JobsService] Falling back to 2-step job creation...');
+    if (!rpcData) {
+      return { success: false, error: 'Job creation failed: no data returned from server.' };
     }
 
-    const { data: insertedJob, error: insertError } = await supabase
-      .from('jobs')
-      .insert({
-        business_id: params.businessId,
-        customer_name: trimmedName,
-        customer_phone: trimmedPhone,
-        service: trimmedService,
-        address: trimmedAddress,
-        scheduled_at: params.scheduledAt,
-        notes: trimmedNotes,
-        status: 'unassigned',
-        worker_id: null,
-        latitude: params.latitude ?? null,
-        longitude: params.longitude ?? null,
-      })
-      .select('*')
-      .single();
-
-    if (insertError || !insertedJob) {
-      return { success: false, error: sanitizeJobError(insertError) };
-    }
-
-    // If worker was requested, assign using centralized transition operation
-    if (params.workerId) {
-      const assignResult = await assignJobWorker(insertedJob.id, params.workerId, 'unassigned');
-
-      if (!assignResult.success) {
-        if (__DEV__) {
-          console.warn('[JobsService] Initial worker assignment failed:', assignResult.error);
-        }
-        // Job was created unassigned, return it with assignment warning
-        return {
-          success: true,
-          job: insertedJob,
-          error: 'Job created, but technician assignment failed: ' + (assignResult.error || 'Assignment error'),
-        };
-      }
-
-      return { success: true, job: assignResult.job || insertedJob };
-    }
-
-    return { success: true, job: insertedJob };
+    return { success: true, job: rpcData };
   } catch (err) {
     return { success: false, error: sanitizeJobError(err) };
   }
@@ -1281,10 +1222,8 @@ export async function fetchJobEventTimeline(
     const { data: rawEvents, error: eventsError } = await query;
 
     if (eventsError) {
-      if (__DEV__) {
-        console.warn('[JobsService] fetchJobEventTimeline error:', eventsError.message);
-      }
-      return { events: [], error: eventsError.message };
+      logger.warn('JobsService', 'fetchJobEventTimeline error:', eventsError.message);
+      return { events: [], error: toUserFacingErrorMessage(eventsError) };
     }
 
     if (!rawEvents || rawEvents.length === 0) {
@@ -1314,9 +1253,7 @@ export async function fetchJobEventTimeline(
         .in('id', profileIds);
 
       if (profilesError) {
-        if (__DEV__) {
-          console.warn('[JobsService] Batched profile lookup warning:', profilesError.message);
-        }
+        logger.warn('JobsService', 'Batched profile lookup warning:', profilesError.message);
       } else if (profiles) {
         for (const p of profiles) {
           profileMap.set(p.id, {
@@ -1493,7 +1430,20 @@ export function sanitizeTransitionError(error: unknown): string {
   if (msg.includes('Network') || msg.includes('Failed to fetch')) {
     return 'Network connection error. Please check your internet connection and retry.';
   }
-  return msg || 'Failed to update job status. Please try again.';
+
+  // Prevent leaking internal SQL syntax or database errors to users
+  if (
+    msg.includes('relation "') ||
+    msg.includes('constraint "') ||
+    msg.includes('syntax error') ||
+    msg.includes('column "') ||
+    msg.includes('PGRST') ||
+    msg.includes('42501')
+  ) {
+    return 'Failed to update job status due to a server error. Please try again.';
+  }
+
+  return sanitizeString(msg) || 'Failed to update job status. Please try again.';
 }
 
 export const sanitizeWorkerActionError = sanitizeTransitionError;
@@ -1537,10 +1487,8 @@ export async function fetchWorkerTodayJobs(
       );
 
     if (error) {
-      if (__DEV__) {
-        console.warn('[JobsService] fetchWorkerTodayJobs error:', error.message);
-      }
-      return { ...emptyResult, error: error.message };
+      logger.warn('JobsService', 'fetchWorkerTodayJobs error:', error.message);
+      return { ...emptyResult, error: toUserFacingErrorMessage(error) };
     }
 
     if (!rawJobs || rawJobs.length === 0) {
@@ -1610,10 +1558,8 @@ export async function fetchWorkerAssignedJobs(
       .order('scheduled_at', { ascending: true, nullsFirst: false });
 
     if (error) {
-      if (__DEV__) {
-        console.warn('[JobsService] fetchWorkerAssignedJobs error:', error.message);
-      }
-      return { ...emptyResult, error: error.message };
+      logger.warn('JobsService', 'fetchWorkerAssignedJobs error:', error.message);
+      return { ...emptyResult, error: toUserFacingErrorMessage(error) };
     }
 
     if (!rawJobs || rawJobs.length === 0) {
@@ -1733,9 +1679,7 @@ export function notifyJobTransition(jobId: string, newStatus: JobStatus): void {
     try {
       listener(jobId, newStatus);
     } catch (err) {
-      if (__DEV__) {
-        console.warn('[JobsService] Invalidation listener error:', err);
-      }
+      logger.warn('JobsService', 'Invalidation listener error:', err);
     }
   });
 }
@@ -1892,9 +1836,7 @@ export async function requestJobTransition(
       // Ignore query failure, proceed to sanitize original error
     }
 
-    if (__DEV__) {
-      console.warn('[JobsService] requestJobTransition error:', err);
-    }
+    logger.warn('JobsService', 'requestJobTransition error:', err);
     return { success: false, error: sanitizeTransitionError(err) };
   } finally {
     inFlightTransitions.delete(jobId);

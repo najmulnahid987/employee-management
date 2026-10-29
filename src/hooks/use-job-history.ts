@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAuth } from '@/hooks/use-auth';
 import {
-  FetchJobHistoryOptions,
   fetchJobHistory,
   JobHistoryDatePreset,
   JobHistoryDateRange,
@@ -132,8 +131,9 @@ export function useJobHistory(options: UseJobHistoryOptions = {}): UseJobHistory
 
   // Clean unmount token invalidation
   useEffect(() => {
+    const reqRef = activeRequestRef;
     return () => {
-      activeRequestRef.current++;
+      reqRef.current++;
     };
   }, []);
 

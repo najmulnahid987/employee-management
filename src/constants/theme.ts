@@ -14,6 +14,8 @@ import '@/global.css';
 
 import { Platform, ViewStyle } from 'react-native';
 
+import { JobStatus } from '@/lib/lifecycle';
+
 export const Palette = {
   // Brand & Neutrals
   neutral900: '#171717',
@@ -137,8 +139,6 @@ export const Colors = {
 } as const;
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
-
-import { JobStatus } from '@/lib/lifecycle';
 
 /**
  * 8-Stage Job Lifecycle as specified in AGENTS.md (centralized in @/lib/lifecycle)

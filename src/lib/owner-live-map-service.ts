@@ -15,11 +15,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { isTrackingEligibleStatus } from './location-rules';
 import {
   buildOwnerLiveMapData,
-  buildOwnerLiveMapWorkerItem,
   composeOwnerLiveMapData,
   OwnerLiveMapData,
-  MAX_ACCURACY_THRESHOLD_METERS,
-  STALE_TELEMETRY_THRESHOLD_MS,
 } from './owner-locations-core';
 import { supabase as defaultSupabase } from './supabase';
 import type { Database } from '../types/database';
@@ -94,9 +91,6 @@ export async function fetchOwnerLiveMapData(
   client: SupabaseClient<Database> = defaultSupabase
 ): Promise<FetchOwnerLiveMapResult> {
   const nowMs = options?.nowMs ?? Date.now();
-  const staleThresholdMs = options?.staleThresholdMs ?? STALE_TELEMETRY_THRESHOLD_MS;
-  const maxAccuracyMeters = options?.maxAccuracyMeters ?? MAX_ACCURACY_THRESHOLD_METERS;
-
   try {
     // -------------------------------------------------------------------------
     // 1. Authoritative Identity & Tenancy Verification

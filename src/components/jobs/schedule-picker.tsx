@@ -49,13 +49,6 @@ export function SchedulePicker({ value, onChange, disabled = false }: SchedulePi
     return list;
   }, []);
 
-  // Parse current value or default to today at 10:00 AM
-  const currentDate = useMemo(() => {
-    if (!value) return new Date();
-    const parsed = new Date(value);
-    return isNaN(parsed.getTime()) ? new Date() : parsed;
-  }, [value]);
-
   const [selectedDayIndex, setSelectedDayIndex] = useState<number>(0);
   const [selectedTimeSlotIndex, setSelectedTimeSlotIndex] = useState<number>(1); // 10:00 AM default
 

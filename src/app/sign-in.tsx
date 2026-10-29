@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -12,7 +11,7 @@ import {
 
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Input, Loading, ScreenContainer } from '@/components/ui';
-import { Radii, Spacing, Typography } from '@/constants/theme';
+import { Radii, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { supabase } from '@/lib/supabase';
@@ -21,7 +20,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function SignInScreen() {
   const theme = useTheme();
-  const { signIn, signUp, session, role, profile, isLoading: authLoading } = useAuth();
+  const { signIn, signUp, session, isLoading: authLoading } = useAuth();
 
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
