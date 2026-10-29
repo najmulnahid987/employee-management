@@ -146,6 +146,14 @@ export default function WorkerInvitationJoinScreen() {
         </Card>
 
         <Button
+          label="Registering a new company? Set up Business"
+          variant="outline"
+          fullWidth
+          disabled={isSubmitting}
+          onPress={() => router.push('/owner/setup')}
+        />
+
+        <Button
           label="Sign Out"
           variant="ghost"
           fullWidth

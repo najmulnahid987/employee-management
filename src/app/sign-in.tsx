@@ -400,7 +400,7 @@ export default function SignInScreen() {
             ) : null}
 
             <Button
-              label={mode === 'signin' ? 'Sign In' : 'Create Owner Account'}
+              label={mode === 'signin' ? 'Sign In' : 'Create Account'}
               variant="primary"
               fullWidth
               loading={formLoading}
@@ -408,6 +408,15 @@ export default function SignInScreen() {
               onPress={handleSubmit}
               style={styles.signInButton}
             />
+
+            {mode === 'signup' ? (
+              <ThemedText
+                type="caption"
+                themeColor="textSecondary"
+                style={{ textAlign: 'center', marginTop: Spacing.xs }}>
+                Joining an existing team? Create your login here, then enter your invite code in the next step.
+              </ThemedText>
+            ) : null}
           </Card>
         )}
 

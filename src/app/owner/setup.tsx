@@ -187,6 +187,22 @@ export default function OwnerBusinessSetupScreen() {
             onPress={handleSubmit}
             style={styles.actionButton}
           />
+
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <ThemedText type="caption" themeColor="textSecondary" style={styles.dividerText}>
+              OR
+            </ThemedText>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <Button
+            label="Have an Invite Code? Join Team as Worker"
+            variant="outline"
+            fullWidth
+            disabled={formLoading}
+            onPress={() => router.push('/worker/join')}
+          />
         </Card>
       </View>
     </ScreenContainer>
@@ -218,9 +234,26 @@ const styles = StyleSheet.create({
   },
   card: {
     padding: Spacing.base,
+    gap: Spacing.xs,
   },
   actionButton: {
     marginTop: Spacing.sm,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  dividerText: {
+    fontWeight: '600',
+    fontSize: 11,
+    letterSpacing: 1,
   },
 });
 

@@ -1483,7 +1483,7 @@ export async function fetchWorkerTodayJobs(
       .eq('business_id', businessId)
       .eq('worker_id', workerId)
       .or(
-        `not.status.in.("completed","cancelled"),and(status.eq.completed,completed_at.gte.${startISO},completed_at.lt.${endISO})`
+        `status.not.in.(completed,cancelled),and(status.eq.completed,completed_at.gte.${startISO},completed_at.lt.${endISO})`
       );
 
     if (error) {

@@ -156,7 +156,7 @@ BEGIN
     END IF;
 
     -- Generate random 8-character uppercase alphanumeric code: DISP-XXXX-XXXX
-    v_code := 'DISP-' || upper(substr(encode(gen_random_bytes(2), 'hex'), 1, 4)) || '-' || upper(substr(encode(gen_random_bytes(2), 'hex'), 1, 4));
+    v_code := 'DISP-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 4)) || '-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 5, 4));
     v_expires_at := clock_timestamp() + interval '7 days';
 
     INSERT INTO public.worker_invitations (
@@ -169,7 +169,7 @@ BEGIN
         v_business_id,
         v_code,
         v_caller_id,
-        pg_catalog.nullif(pg_catalog.trim(p_email), ''),
+        NULLIF(trim(p_email), ''),
         v_expires_at
     )
     RETURNING id INTO v_invitation_id;
@@ -198,14 +198,14 @@ DECLARE
     v_inv RECORD;
     v_business RECORD;
 BEGIN
-    IF p_invite_code IS NULL OR length(pg_catalog.trim(p_invite_code)) = 0 THEN
+    IF p_invite_code IS NULL OR length(trim(p_invite_code)) = 0 THEN
         RETURN jsonb_build_object('valid', false, 'error', 'Invitation code is required');
     END IF;
 
     SELECT id, business_id, is_used, expires_at
     INTO v_inv
     FROM public.worker_invitations
-    WHERE upper(invite_code) = upper(pg_catalog.trim(p_invite_code));
+    WHERE upper(invite_code) = upper(trim(p_invite_code));
 
     IF NOT FOUND THEN
         RETURN jsonb_build_object('valid', false, 'error', 'Invalid invitation code');
@@ -265,19 +265,19 @@ BEGIN
             USING ERRCODE = '42501';
     END IF;
 
-    v_trimmed_name := pg_catalog.trim(COALESCE(p_full_name, ''));
+    v_trimmed_name := trim(COALESCE(p_full_name, ''));
     IF length(v_trimmed_name) = 0 THEN
         RAISE EXCEPTION 'Full name is required to join'
             USING ERRCODE = '22023';
     END IF;
 
-    v_trimmed_phone := pg_catalog.nullif(pg_catalog.trim(COALESCE(p_phone, '')), '');
+    v_trimmed_phone := NULLIF(trim(COALESCE(p_phone, '')), '');
 
     -- Lock and validate invitation
     SELECT id, business_id, is_used, expires_at
     INTO v_inv
     FROM public.worker_invitations
-    WHERE upper(invite_code) = upper(pg_catalog.trim(p_invite_code))
+    WHERE upper(invite_code) = upper(trim(p_invite_code))
     FOR UPDATE;
 
     IF NOT FOUND THEN

@@ -53,8 +53,20 @@ export function sanitizeAuthError(error: unknown): string {
     message = String(error);
   }
 
-  if (message.includes('provision_business') || message.includes('PGRST202')) {
+  if (message.includes('create_worker_invitation')) {
+    return 'Database function "create_worker_invitation" not found. Please run the worker onboarding migration in your Supabase SQL Editor.';
+  }
+  if (message.includes('join_business_team')) {
+    return 'Database function "join_business_team" not found. Please run the worker onboarding migration in your Supabase SQL Editor.';
+  }
+  if (message.includes('verify_worker_invitation')) {
+    return 'Database function "verify_worker_invitation" not found. Please run the worker onboarding migration in your Supabase SQL Editor.';
+  }
+  if (message.includes('provision_business')) {
     return 'Database function "provision_business" not found. Please run the migration in your Supabase SQL Editor.';
+  }
+  if (message.includes('PGRST202')) {
+    return 'A required database RPC function was not found in Supabase. Please ensure all migrations have been executed in your Supabase SQL Editor.';
   }
   if (message.includes('Invalid invitation code')) {
     return 'Invalid invitation code. Please check the code with your employer.';
@@ -363,16 +375,19 @@ export async function createWorkerInvitation(
     });
 
     if (error) {
+      logger.error('Auth', 'create_worker_invitation RPC error:', error.message || error);
       return { success: false, error: sanitizeAuthError(error) };
     }
 
     if (!data || typeof data !== 'object') {
+      logger.error('Auth', 'create_worker_invitation returned invalid payload:', data);
       return { success: false, error: 'Failed to generate invitation code.' };
     }
 
     const payload = data as { id: string; invite_code: string; expires_at: string };
     return { success: true, data: payload };
   } catch (err) {
+    logger.error('Auth', 'Exception in createWorkerInvitation:', err);
     return { success: false, error: sanitizeAuthError(err) };
   }
 }
