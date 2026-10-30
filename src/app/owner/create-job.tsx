@@ -1,16 +1,18 @@
 import { router } from 'expo-router';
+import * as Location from 'expo-location';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { SchedulePicker } from '@/components/jobs/schedule-picker';
 import { ServicePicker } from '@/components/jobs/service-picker';
 import { WorkerSelectorSheet } from '@/components/jobs/worker-selector-sheet';
+import { JobLocationMapPicker } from '@/components/map/job-location-map-picker';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Input, ScreenContainer, StatusBadge } from '@/components/ui';
 import { JobStatus, Palette, Radii, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
-import { geocodeAddress } from '@/lib/geocoding';
+import { geocodeAddress, reverseGeocodeCoordinates } from '@/lib/geocoding';
 import {
   AssignableWorker,
   createJob,
@@ -18,6 +20,7 @@ import {
   formatScheduledTime,
   Job,
 } from '@/lib/jobs';
+import { safeBack } from '@/lib/navigation';
 import { validatePhoneNumber } from '@/lib/phone';
 
 export default function CreateJobScreen() {
@@ -45,6 +48,13 @@ export default function CreateJobScreen() {
   const [serviceError, setServiceError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [geocodingNotice, setGeocodingNotice] = useState<string | null>(null);
+
+  // Map Coordinates & Geocoding
+  const [resolvedCoordinates, setResolvedCoordinates] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const [isGeocoding, setIsGeocoding] = useState(false);
 
   // Loading States
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -110,6 +120,60 @@ export default function CreateJobScreen() {
     return isValid;
   };
 
+  const handleGeocodeAddress = async () => {
+    if (!address.trim()) {
+      setAddressError('Please enter a service address first.');
+      return;
+    }
+    setIsGeocoding(true);
+    setAddressError(null);
+    setGeocodingNotice(null);
+    try {
+      const geoResult = await geocodeAddress(address, 4000);
+      if (geoResult.coordinates) {
+        setResolvedCoordinates(geoResult.coordinates);
+      } else {
+        setGeocodingNotice(
+          'Could not find this address on the map. You can still save the job with the text address.'
+        );
+      }
+    } catch {
+      setGeocodingNotice('Geocoding service timed out. You can still save the job.');
+    } finally {
+      setIsGeocoding(false);
+    }
+  };
+
+  const handleUseCurrentLocation = async () => {
+    setIsGeocoding(true);
+    setGeocodingNotice(null);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setGeocodingNotice('Location permission was denied. Please enter address manually.');
+        setIsGeocoding(false);
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+      setResolvedCoordinates(coords);
+
+      // Reverse geocode to populate address if currently empty
+      if (!address.trim()) {
+        const rev = await reverseGeocodeCoordinates(coords.latitude, coords.longitude);
+        if (rev.address) {
+          setAddress(rev.address);
+        }
+      }
+    } catch {
+      setGeocodingNotice('Could not retrieve current device location.');
+    } finally {
+      setIsGeocoding(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (isSubmitting || !businessId) return;
 
@@ -126,18 +190,20 @@ export default function CreateJobScreen() {
       const phoneValidation = validatePhoneNumber(customerPhone);
       const normalizedPhone = phoneValidation.normalized;
 
-      // 2. Perform on-submit geocoding (with 3000ms timeout and safe null fallback)
-      let resolvedCoords: { latitude: number; longitude: number } | null = null;
-      try {
-        const geoResult = await geocodeAddress(address, 3000);
-        resolvedCoords = geoResult.coordinates;
-        if (!resolvedCoords) {
-          setGeocodingNotice(
-            'Address coordinates could not be resolved automatically. The job is being saved with the textual address.'
-          );
+      // 2. Use user-pinned coordinates or fallback to on-submit geocoding
+      let resolvedCoords: { latitude: number; longitude: number } | null = resolvedCoordinates;
+      if (!resolvedCoords) {
+        try {
+          const geoResult = await geocodeAddress(address, 3000);
+          resolvedCoords = geoResult.coordinates;
+          if (!resolvedCoords) {
+            setGeocodingNotice(
+              'Address coordinates could not be resolved automatically. The job is being saved with the textual address.'
+            );
+          }
+        } catch {
+          resolvedCoords = null;
         }
-      } catch {
-        resolvedCoords = null;
       }
 
       // 3. Dispatch secure atomic job creation
@@ -270,7 +336,7 @@ export default function CreateJobScreen() {
                 label="Return to Dashboard"
                 variant="outline"
                 fullWidth
-                onPress={() => router.back()}
+                onPress={() => safeBack('/owner/dashboard')}
               />
             </View>
           </Card>
@@ -369,20 +435,57 @@ export default function CreateJobScreen() {
             disabled={isSubmitting}
           />
 
-          {/* Physical Service Address */}
-          <Input
-            label="Service Site Address *"
-            placeholder="e.g. 742 Evergreen Terrace, Springfield"
-            value={address}
-            onChangeText={(text) => {
-              setAddress(text);
-              if (addressError) setAddressError(null);
-              if (geocodingNotice) setGeocodingNotice(null);
-            }}
-            error={addressError ?? undefined}
-            helperText="Physical address where work will be performed"
-            editable={!isSubmitting}
-          />
+          {/* Physical Service Address with Location Pin Button */}
+          <View style={styles.addressSection}>
+            <View style={styles.addressInputRow}>
+              <View style={styles.addressInputContainer}>
+                <Input
+                  label="Service Site Address *"
+                  placeholder="e.g. 742 Evergreen Terrace, Springfield"
+                  value={address}
+                  onChangeText={(text) => {
+                    setAddress(text);
+                    if (addressError) setAddressError(null);
+                    if (geocodingNotice) setGeocodingNotice(null);
+                  }}
+                  error={addressError ?? undefined}
+                  helperText="Physical address where work will be performed"
+                  editable={!isSubmitting}
+                />
+              </View>
+              <Pressable
+                onPress={handleGeocodeAddress}
+                disabled={isGeocoding || isSubmitting}
+                style={({ pressed }) => [
+                  styles.pinIconButton,
+                  {
+                    backgroundColor: resolvedCoordinates
+                      ? Palette.greenBg
+                      : theme.surfaceSecondary,
+                    borderColor: resolvedCoordinates
+                      ? Palette.greenBorder
+                      : theme.border,
+                    opacity: isGeocoding || isSubmitting ? 0.6 : pressed ? 0.7 : 1,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Locate address on map">
+                <ThemedText style={styles.pinIconText}>
+                  {isGeocoding ? '⏳' : '📍'}
+                </ThemedText>
+              </Pressable>
+            </View>
+
+            {/* Interactive Map Picker & Preview */}
+            <JobLocationMapPicker
+              coordinates={resolvedCoordinates}
+              onCoordinatesChange={(newCoords) => setResolvedCoordinates(newCoords)}
+              address={address}
+              isGeocoding={isGeocoding}
+              onFindAddressOnMap={handleGeocodeAddress}
+              onUseCurrentLocation={handleUseCurrentLocation}
+            />
+          </View>
 
           {/* Schedule Picker */}
           <SchedulePicker
@@ -496,6 +599,29 @@ const styles = StyleSheet.create({
   },
   formCard: {
     padding: Spacing.base,
+  },
+  addressSection: {
+    marginBottom: Spacing.xs,
+  },
+  addressInputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.xs,
+  },
+  addressInputContainer: {
+    flex: 1,
+  },
+  pinIconButton: {
+    marginTop: 22,
+    width: 48,
+    height: 48,
+    borderRadius: Radii.base,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pinIconText: {
+    fontSize: 22,
   },
   errorCard: {
     padding: Spacing.md,

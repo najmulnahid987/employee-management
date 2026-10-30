@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
@@ -13,6 +13,7 @@ import {
   fetchAssignableWorkers,
   fetchJobDetails,
 } from '@/lib/jobs';
+import { safeBack } from '@/lib/navigation';
 
 export default function AssignWorkerScreen() {
   const theme = useTheme();
@@ -91,7 +92,7 @@ export default function AssignWorkerScreen() {
           [
             {
               text: 'OK',
-              onPress: () => router.back(),
+              onPress: () => safeBack('/owner/dashboard'),
             },
           ]
         );
@@ -151,7 +152,7 @@ export default function AssignWorkerScreen() {
             title="No Job Specified"
             description="Please select a service job from your Operations Dashboard to assign a field technician."
             actionLabel="Back to Dashboard"
-            onAction={() => router.back()}
+            onAction={() => safeBack('/owner/dashboard')}
           />
         </View>
       </ScreenContainer>
@@ -192,7 +193,7 @@ export default function AssignWorkerScreen() {
                   title="No Field Workers Registered"
                   description="You have not added any technicians to your business roster yet. Add team members to dispatch jobs."
                   actionLabel="Go Back"
-                  onAction={() => router.back()}
+                  onAction={() => safeBack('/owner/dashboard')}
                 />
               ) : (
                 <View style={styles.emptySearch}>

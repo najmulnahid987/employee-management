@@ -4,6 +4,7 @@ import { Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { WorkerJobCard } from '@/components/jobs/worker-job-card';
 import { InAppNotificationsSheet } from '@/components/in-app-notifications-sheet';
+import { WorkerLiveLocationCard } from '@/components/location/worker-live-location-card';
 import { NotificationPermissionPrompt } from '@/components/notification-permission-prompt';
 import { RealtimeStatusBanner } from '@/components/realtime-status-banner';
 import { ThemedText } from '@/components/themed-text';
@@ -121,6 +122,14 @@ export default function WorkerTodayScreen() {
             />
           </Card>
         ) : null}
+
+        {/* Live Location Sharing Beacon Toggle */}
+        <WorkerLiveLocationCard
+          jobId={heroJob?.id ?? null}
+          jobStatus={(heroJob?.status as JobStatus) ?? null}
+          jobTitle={heroJob?.service ?? null}
+          onStatusTransitioned={refetch}
+        />
 
         {/* Hero Card: Most Relevant Active or Next Job */}
         {heroJob ? (

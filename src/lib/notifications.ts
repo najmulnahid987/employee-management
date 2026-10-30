@@ -14,7 +14,6 @@
 
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import {
@@ -30,23 +29,34 @@ import {
 import { logger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 
+let Notifications: typeof import('expo-notifications') | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  Notifications = require('expo-notifications');
+} catch (err) {
+  logger.warn('Notifications', 'expo-notifications native module unavailable in this environment (e.g. Expo Go):', err);
+  Notifications = null;
+}
+
 /**
  * Configure global foreground notification presentation handler.
  * Runs at module evaluation so incoming notifications are properly presented.
  */
 try {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => {
-      const options = getNotificationPresentationOptions();
-      return {
-        shouldShowAlert: options.shouldShowAlert,
-        shouldShowBanner: options.shouldShowBanner,
-        shouldShowList: options.shouldShowList,
-        shouldPlaySound: options.shouldPlaySound,
-        shouldSetBadge: options.shouldSetBadge,
-      };
-    },
-  });
+  if (Notifications?.setNotificationHandler) {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => {
+        const options = getNotificationPresentationOptions();
+        return {
+          shouldShowAlert: options.shouldShowAlert,
+          shouldShowBanner: options.shouldShowBanner,
+          shouldShowList: options.shouldShowList,
+          shouldPlaySound: options.shouldPlaySound,
+          shouldSetBadge: options.shouldSetBadge,
+        };
+      },
+    });
+  }
 } catch (err) {
   logger.warn('Notifications', 'Failed to initialize notification handler:', err);
 }
@@ -56,7 +66,7 @@ try {
  * Safe to call repeatedly; no-op on iOS and Web.
  */
 export async function setupNotificationChannelsAsync(): Promise<void> {
-  if (Platform.OS !== 'android') return;
+  if (Platform.OS !== 'android' || !Notifications?.setNotificationChannelAsync) return;
 
   try {
     await Notifications.setNotificationChannelAsync(
@@ -82,7 +92,7 @@ export async function setupNotificationChannelsAsync(): Promise<void> {
  * Never displays a system dialog to the user.
  */
 export async function getNotificationPermissionStatusAsync(): Promise<NotificationPermissionState> {
-  if (Platform.OS === 'web') return 'UNDETERMINED';
+  if (Platform.OS === 'web' || !Notifications?.getPermissionsAsync) return 'UNDETERMINED';
 
   try {
     const settings = await Notifications.getPermissionsAsync();
@@ -99,7 +109,7 @@ export async function getNotificationPermissionStatusAsync(): Promise<Notificati
  * NEVER automatically at initial application launch.
  */
 export async function requestNotificationPermissionAsync(): Promise<NotificationPermissionState> {
-  if (Platform.OS === 'web') return 'UNDETERMINED';
+  if (Platform.OS === 'web' || !Notifications?.requestPermissionsAsync) return 'UNDETERMINED';
 
   try {
     const settings = await Notifications.requestPermissionsAsync({
@@ -148,6 +158,14 @@ export async function registerPushTokenForAuthenticatedUserAsync(): Promise<Devi
       success: false,
       reason: 'SIMULATOR_NOT_SUPPORTED',
       error: 'Web platform does not support Expo native push tokens',
+    };
+  }
+
+  if (!Notifications?.getExpoPushTokenAsync) {
+    return {
+      success: false,
+      reason: 'SIMULATOR_NOT_SUPPORTED',
+      error: 'expo-notifications native module is not available in current environment (e.g. Expo Go)',
     };
   }
 
@@ -255,7 +273,7 @@ export async function deactivateDeviceTokenAsync(
 export function setupPushTokenRefreshListener(
   onTokenRefresh?: (newToken: string) => void
 ): { unsubscribe: () => void } {
-  if (Platform.OS === 'web') {
+  if (Platform.OS === 'web' || !Notifications?.addPushTokenListener) {
     return { unsubscribe: () => {} };
   }
 

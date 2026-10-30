@@ -1,22 +1,18 @@
 /**
  * Dispatcher Live Map Viewport (Native)
  *
- * Implements M12.4 Native Map UI:
- * - GoogleMaps.View on Android (Maps SDK for Android).
- * - AppleMaps.View on iOS (Apple Maps via SwiftUI).
- * - Renders markers strictly for workers with valid, fresh coordinates on operational jobs.
- * - Restrained marker colors and M9 lifecycle labels: Travelling, Arrived, Working.
- * - Pure data binding: zero sample markers or hardcoded fallback coordinates.
- * - Never prompts owner for GPS permission (isMyLocationEnabled: false).
- * - Meaningful error/setup state if Google Maps API key or native dev build is missing.
- * - Empty state when no eligible workers have usable live coordinates.
- * - Stable camera position preventing camera reset loops on telemetry refreshes.
+ * Implements M12.4 Native Map UI via react-native-maps:
+ * - MapView and Marker on iOS (Apple Maps) and Android.
+ * - Always renders the native map viewport so the owner has full territory visibility.
+ * - Renders markers for field technicians with valid coordinates on operational visits.
+ * - Status-coded marker pins: Travelling (Blue), Arrived (Cyan), Working (Orange), Stale (Amber).
+ * - Floating status badge displays active technician count.
+ * - Tapping a marker triggers onSelectMarker to open LiveMapBottomSheet.
  */
 
-import Constants, { AppOwnership, ExecutionEnvironment } from 'expo-constants';
-import { AppleMaps, GoogleMaps } from 'expo-maps';
-import React, { useMemo } from 'react';
-import { Platform, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 
 import { ThemedText } from '@/components/themed-text';
 import { Palette, Radii, Spacing } from '@/constants/theme';
@@ -76,162 +72,80 @@ class MapNativeErrorBoundary extends React.Component<
 export function LiveMapViewport({
   style,
   items = [],
-  emptyState,
   initialCoordinates,
-  zoom = 13,
   selectedWorkerId,
   onSelectMarker,
 }: LiveMapViewportProps) {
   const theme = useTheme();
+  const mapRef = useRef<MapView | null>(null);
 
-  // Stable initial camera position to prevent resetting camera on telemetry refreshes
-  const cameraPosition = useMemo(() => {
-    if (initialCoordinates) {
-      return { coordinates: initialCoordinates, zoom };
-    }
-    const firstValid = items.find(
-      (item) =>
-        item.workerLatitude !== null &&
-        item.workerLongitude !== null &&
-        Number.isFinite(item.workerLatitude) &&
-        Number.isFinite(item.workerLongitude)
-    );
-    if (firstValid && firstValid.workerLatitude !== null && firstValid.workerLongitude !== null) {
-      return {
-        coordinates: {
-          latitude: firstValid.workerLatitude,
-          longitude: firstValid.workerLongitude,
-        },
-        zoom,
-      };
-    }
-    return undefined;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // 1. Check if running in standard Expo Go (which lacks native expo-maps binaries)
-  const isExpoGo =
-    Constants.appOwnership === AppOwnership.Expo ||
-    Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-
-  if (isExpoGo) {
-    return (
-      <View
-        style={[
-          styles.container,
-          {
-            backgroundColor: theme.surfaceSecondary,
-            borderColor: theme.border,
-          },
-          style,
-        ]}>
-        <View style={styles.warningBadge}>
-          <ThemedText type="caption" style={{ color: Palette.amberText, fontWeight: '600' }}>
-            DEVELOPMENT BUILD REQUIRED
-          </ThemedText>
-        </View>
-        <ThemedText type="bodyMedium" style={{ fontWeight: '600', marginTop: Spacing.xs }}>
-          Native Map Requires Custom Dev Build
-        </ThemedText>
-        <ThemedText
-          type="caption"
-          themeColor="textSecondary"
-          style={{ textAlign: 'center', maxWidth: 360 }}>
-          expo-maps requires a custom development build (npx expo run:android or npx expo run:ios).
-          Field worker telemetry is active and listed below.
-        </ThemedText>
-      </View>
-    );
-  }
-
-  // 2. Check Android Google Maps API Key configuration
-  const isAndroid = Platform.OS === 'android';
-  const googleMapsApiKey =
-    process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ||
-    (Constants.expoConfig?.android?.config as { googleMaps?: { apiKey?: string } } | undefined)
-      ?.googleMaps?.apiKey ||
-    '';
-
-  if (isAndroid && !googleMapsApiKey) {
-    return (
-      <View
-        style={[
-          styles.container,
-          {
-            backgroundColor: theme.surfaceSecondary,
-            borderColor: theme.border,
-          },
-          style,
-        ]}>
-        <View style={styles.warningBadge}>
-          <ThemedText type="caption" style={{ color: Palette.amberText, fontWeight: '600' }}>
-            CONFIGURATION REQUIRED
-          </ThemedText>
-        </View>
-        <ThemedText type="bodyMedium" style={{ fontWeight: '600', marginTop: Spacing.xs }}>
-          Google Maps API Key Missing
-        </ThemedText>
-        <ThemedText
-          type="caption"
-          themeColor="textSecondary"
-          style={{ textAlign: 'center', maxWidth: 360 }}>
-          Android requires a Google Maps API key to render native tiles. Set
-          EXPO_PUBLIC_GOOGLE_MAPS_API_KEY in your environment. Telemetry data remains accessible
-          below.
-        </ThemedText>
-      </View>
-    );
-  }
-
-  // 3. Filter valid live marker items strictly (Requirement 2 & 4: zero fake pins)
-  const validLiveItems = items.filter(
-    (item) =>
-      item.isLive &&
-      item.workerLatitude !== null &&
-      item.workerLongitude !== null &&
-      !isNaN(item.workerLatitude) &&
-      !isNaN(item.workerLongitude)
+  // Filter valid items with actual coordinates
+  const validLiveItems = useMemo(
+    () =>
+      items.filter(
+        (item) =>
+          item.workerLatitude !== null &&
+          item.workerLongitude !== null &&
+          !isNaN(item.workerLatitude) &&
+          !isNaN(item.workerLongitude)
+      ),
+    [items]
   );
 
-  // 4. Empty State: No eligible workers currently have a usable live fix
-  if (validLiveItems.length === 0) {
-    if (emptyState) {
-      return <View style={[styles.wrapper, style]}>{emptyState}</View>;
+  // Stable initial region
+  const initialRegion = useMemo(() => {
+    if (initialCoordinates) {
+      return {
+        latitude: initialCoordinates.latitude,
+        longitude: initialCoordinates.longitude,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      };
     }
-    return (
-      <View
-        style={[
-          styles.container,
-          {
-            backgroundColor: theme.surfaceSecondary,
-            borderColor: theme.border,
-          },
-          style,
-        ]}>
-        <View
-          style={[
-            styles.neutralBadge,
-            { backgroundColor: theme.surface, borderColor: theme.border },
-          ]}>
-          <ThemedText type="caption" themeColor="textSecondary" style={{ fontWeight: '600' }}>
-            NO LIVE FIXES
-          </ThemedText>
-        </View>
-        <ThemedText type="bodyMedium" style={{ fontWeight: '600', marginTop: Spacing.xs }}>
-          No Active Worker Markers
-        </ThemedText>
-        <ThemedText
-          type="caption"
-          themeColor="textSecondary"
-          style={{ textAlign: 'center', maxWidth: 360 }}>
-          Live markers appear when technicians enter field travel (Travelling) or arrive on site
-          with active GPS telemetry.
-        </ThemedText>
-      </View>
-    );
-  }
+    const firstValid = validLiveItems[0];
+    if (firstValid && firstValid.workerLatitude && firstValid.workerLongitude) {
+      return {
+        latitude: firstValid.workerLatitude,
+        longitude: firstValid.workerLongitude,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
+      };
+    }
+    // Default territory center (e.g. SF Metro)
+    return {
+      latitude: 37.7749,
+      longitude: -122.4194,
+      latitudeDelta: 0.08,
+      longitudeDelta: 0.08,
+    };
+  }, [initialCoordinates, validLiveItems]);
 
-  // 6. Native Map Rendering with Error Boundary
+  // Fit camera bounds when live markers change
+  useEffect(() => {
+    if (mapRef.current && validLiveItems.length > 0) {
+      const coords = validLiveItems.map((item) => ({
+        latitude: item.workerLatitude!,
+        longitude: item.workerLongitude!,
+      }));
+      if (coords.length === 1) {
+        mapRef.current.animateToRegion(
+          {
+            latitude: coords[0].latitude,
+            longitude: coords[0].longitude,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+          },
+          400
+        );
+      } else {
+        mapRef.current.fitToCoordinates(coords, {
+          edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+          animated: true,
+        });
+      }
+    }
+  }, [validLiveItems]);
+
   return (
     <MapNativeErrorBoundary
       fallback={(msg) => (
@@ -246,11 +160,11 @@ export function LiveMapViewport({
           ]}>
           <View style={styles.warningBadge}>
             <ThemedText type="caption" style={{ color: Palette.amberText, fontWeight: '600' }}>
-              MAP INITIALIZATION FAILED
+              MAP NOTICE
             </ThemedText>
           </View>
           <ThemedText type="bodyMedium" style={{ fontWeight: '600', marginTop: Spacing.xs }}>
-            Unable to display native map
+            Unable to initialize native map view
           </ThemedText>
           <ThemedText
             type="caption"
@@ -260,76 +174,68 @@ export function LiveMapViewport({
           </ThemedText>
         </View>
       )}>
-      <View style={[styles.wrapper, style]}>
-        {isAndroid ? (
-          <GoogleMaps.View
-            style={StyleSheet.absoluteFill}
-            cameraPosition={cameraPosition}
-            markers={validLiveItems.map((item) => {
-              const statusLabel = getMapLifecycleStatusLabel(item.jobStatus);
-              return {
-                id: item.workerId,
-                coordinates: {
-                  latitude: item.workerLatitude!,
-                  longitude: item.workerLongitude!,
-                },
-                title: `${item.workerName} • ${statusLabel}`,
-                snippet: item.jobService
-                  ? `${item.jobService}${item.jobAddress ? ` — ${item.jobAddress}` : ''}`
-                  : item.jobAddress || '',
-                showCallout: true,
-              };
-            })}
-            properties={{
-              isMyLocationEnabled: false,
-            }}
-            uiSettings={{
-              myLocationButtonEnabled: false,
-              compassEnabled: true,
-            }}
-            onMarkerClick={(marker) => {
-              if (marker.id) {
-                onSelectMarker?.(marker.id);
-              }
-            }}
-          />
-        ) : (
-          <AppleMaps.View
-            style={StyleSheet.absoluteFill}
-            cameraPosition={cameraPosition}
-            markers={validLiveItems.map((item) => {
-              const statusLabel = getMapLifecycleStatusLabel(item.jobStatus);
-              const color =
-                item.jobStatus && item.jobStatus in MAP_STATUS_COLORS
-                  ? MAP_STATUS_COLORS[item.jobStatus as keyof typeof MAP_STATUS_COLORS]
-                  : '#1D4ED8';
-              const initial = item.workerName ? item.workerName.charAt(0).toUpperCase() : 'W';
+      <View style={[styles.wrapper, { borderColor: theme.border }, style]}>
+        <MapView
+          ref={mapRef}
+          style={StyleSheet.absoluteFill}
+          provider={PROVIDER_DEFAULT}
+          initialRegion={initialRegion}
+          showsUserLocation={false}
+          showsMyLocationButton={false}
+          showsCompass={true}>
+          {validLiveItems.map((item) => {
+            const statusLabel = getMapLifecycleStatusLabel(item.jobStatus);
+            let color =
+              item.jobStatus && item.jobStatus in MAP_STATUS_COLORS
+                ? MAP_STATUS_COLORS[item.jobStatus as keyof typeof MAP_STATUS_COLORS]
+                : '#16A34A';
 
-              return {
-                id: item.workerId,
-                coordinates: {
+            if (item.isStale) {
+              color = '#D97706';
+            }
+
+            const isSelected = selectedWorkerId === item.workerId;
+
+            return (
+              <Marker
+                key={item.workerId}
+                identifier={item.workerId}
+                coordinate={{
                   latitude: item.workerLatitude!,
                   longitude: item.workerLongitude!,
-                },
-                title: `${item.workerName} • ${statusLabel}`,
-                monogram: initial,
-                tintColor: color,
-              };
-            })}
-            properties={{
-              isMyLocationEnabled: false,
-            }}
-            uiSettings={{
-              myLocationButtonEnabled: false,
-              compassEnabled: true,
-            }}
-            onMarkerClick={(marker) => {
-              if (marker.id) {
-                onSelectMarker?.(marker.id);
-              }
-            }}
-          />
-        )}
+                }}
+                title={`${item.workerName} • ${statusLabel}`}
+                description={
+                  item.jobService
+                    ? `${item.jobService}${item.jobAddress ? ` — ${item.jobAddress}` : ''}`
+                    : item.jobAddress || ''
+                }
+                pinColor={isSelected ? '#171717' : color}
+                onPress={() => {
+                  onSelectMarker?.(item.workerId);
+                }}
+              />
+            );
+          })}
+        </MapView>
+
+        {/* Floating Status Badge Overlay */}
+        <View style={styles.floatingOverlay}>
+          {validLiveItems.length > 0 ? (
+            <View style={[styles.statusBadge, { backgroundColor: theme.surface }]}>
+              <View style={[styles.pulsingDot, { backgroundColor: Palette.blueText }]} />
+              <ThemedText type="caption" style={{ fontWeight: '700', color: Palette.blueText }}>
+                {validLiveItems.length} LIVE TECHNICIAN{validLiveItems.length === 1 ? '' : 'S'}
+              </ThemedText>
+            </View>
+          ) : (
+            <View style={[styles.statusBadge, { backgroundColor: theme.surface }]}>
+              <ThemedText type="caption" style={{ fontWeight: '600', color: theme.textSecondary }}>
+                📍 Territory Map • 0 Technicians Currently Active
+              </ThemedText>
+            </View>
+          )}
+        </View>
       </View>
     </MapNativeErrorBoundary>
   );
@@ -337,8 +243,10 @@ export function LiveMapViewport({
 
 const styles = StyleSheet.create({
   wrapper: {
-    overflow: 'hidden',
+    height: 320,
     borderRadius: Radii.md,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
   container: {
     minHeight: 240,
@@ -358,10 +266,29 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: Radii.pill,
   },
-  neutralBadge: {
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: Radii.pill,
+  floatingOverlay: {
+    position: 'absolute',
+    top: Spacing.sm,
+    left: Spacing.sm,
+    right: Spacing.sm,
+    alignItems: 'center',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+    borderRadius: Radii.full,
+    shadowColor: '#000000',
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  pulsingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
 });

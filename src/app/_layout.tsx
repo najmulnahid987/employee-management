@@ -1,7 +1,8 @@
 import { DarkTheme, DefaultTheme, ErrorBoundaryProps, router, Stack, ThemeProvider, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
-import { useColorScheme } from 'react-native';
+import { BackHandler, useColorScheme } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AppErrorView } from '@/components/app-error-view';
@@ -91,6 +92,27 @@ function NavigationRouteGuard() {
       return;
     }
   }, [session, profile, role, isLoading, profileError, isDeactivated, rootSegment, subSegment]);
+
+  // Handle Android hardware back press cleanly without unhandled GO_BACK warnings
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (router.canGoBack()) {
+        router.back();
+        return true;
+      }
+      if (rootSegment === 'owner' && subSegment && subSegment !== '(tabs)' && subSegment !== 'dashboard') {
+        router.replace('/owner/(tabs)/dashboard');
+        return true;
+      }
+      if (rootSegment === 'worker' && subSegment && subSegment !== '(tabs)' && subSegment !== 'today') {
+        router.replace('/worker/(tabs)/today');
+        return true;
+      }
+      return false;
+    });
+
+    return () => subscription.remove();
+  }, [rootSegment, subSegment]);
 
   // If there is an active profile error or the account is deactivated or role is invalid:
   if (!isLoading && session) {
@@ -203,13 +225,15 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AuthProvider>
-        <RealtimeProvider>
-          <RootContent />
-        </RealtimeProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <AuthProvider>
+          <RealtimeProvider>
+            <RootContent />
+          </RealtimeProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 

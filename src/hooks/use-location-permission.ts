@@ -77,24 +77,29 @@ export function useLocationPermission(): UseLocationPermissionResult {
 
   const ensurePermissionForTravel = useCallback(
     async (onProceed: () => void) => {
-      const current = await checkLocationPermissionStatus();
-      setPermissionState(current.state);
+      try {
+        const current = await checkLocationPermissionStatus();
+        setPermissionState(current.state);
 
-      // 1. If already granted (fine or approximate), proceed directly without showing modal
-      if (current.state === 'GRANTED' || current.state === 'APPROXIMATE') {
+        // 1. If already granted (fine or approximate), proceed directly without showing modal
+        if (current.state === 'GRANTED' || current.state === 'APPROXIMATE') {
+          onProceed();
+          return;
+        }
+
+        // 2. If technician already dismissed explanation in this session, do not re-prompt
+        if (hasDismissedPermissionNotice()) {
+          onProceed();
+          return;
+        }
+
+        // 3. Otherwise, queue callback and show the user-facing explanation modal
+        setPendingProceedCallback(() => onProceed);
+        setIsExplanationVisible(true);
+      } catch {
+        // Never block technician workflow if permission inspection fails
         onProceed();
-        return;
       }
-
-      // 2. If technician already dismissed explanation in this session, do not re-prompt
-      if (hasDismissedPermissionNotice()) {
-        onProceed();
-        return;
-      }
-
-      // 3. Otherwise, queue callback and show the user-facing explanation modal
-      setPendingProceedCallback(() => onProceed);
-      setIsExplanationVisible(true);
     },
     []
   );

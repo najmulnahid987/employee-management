@@ -1,9 +1,10 @@
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { LocationPermissionModal } from '@/components/location/location-permission-modal';
 import { TrackingStatusIndicator } from '@/components/location/tracking-status-indicator';
+import { WorkerLiveLocationCard } from '@/components/location/worker-live-location-card';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Loading, ScreenContainer, StatusBadge } from '@/components/ui';
 import { JobStatus, Palette, Radii, Spacing } from '@/constants/theme';
@@ -18,6 +19,7 @@ import {
   requestJobTransition,
   subscribeToJobTransitions,
 } from '@/lib/jobs';
+import { safeBack } from '@/lib/navigation';
 import { stopBackgroundTrackingAsync } from '@/lib/background-location-task';
 import { foregroundLocationTracker } from '@/lib/location-tracker';
 import { launchNativeMaps, launchPhoneCall } from '@/lib/launchers';
@@ -274,7 +276,7 @@ export default function WorkerJobDetailsScreen() {
                   [
                     {
                       text: 'OK',
-                      onPress: () => router.back(),
+                      onPress: () => safeBack('/worker/today'),
                     },
                   ]
                 );
@@ -315,7 +317,7 @@ export default function WorkerJobDetailsScreen() {
               label="Go Back"
               variant="outline"
               size="sm"
-              onPress={() => router.back()}
+              onPress={() => safeBack('/worker/today')}
               style={{ marginTop: Spacing.sm }}
             />
           </Card>
@@ -347,7 +349,7 @@ export default function WorkerJobDetailsScreen() {
               label="Return to Schedule"
               variant="outline"
               size="sm"
-              onPress={() => router.back()}
+              onPress={() => safeBack('/worker/today')}
               style={{ marginTop: Spacing.sm }}
             />
           </Card>
@@ -363,6 +365,7 @@ export default function WorkerJobDetailsScreen() {
   const isInProgress = job.status === 'in_progress';
   const isCompleted = job.status === 'completed';
   const isCancelled = job.status === 'cancelled';
+  const isTerminal = isCompleted || isCancelled;
   const shortJobId = `JOB-${job.id.slice(0, 6).toUpperCase()}`;
 
   const nextWorkerAction = getNextWorkerAction(job.status as JobStatus);
@@ -466,6 +469,16 @@ export default function WorkerJobDetailsScreen() {
             isWriting={tracker.isWriting}
             trackingError={tracker.trackingError}
             permissionState={permissionState}
+          />
+        ) : null}
+
+        {/* Live Location Sharing Beacon Control */}
+        {!isTerminal && isAssignedToCurrentWorker ? (
+          <WorkerLiveLocationCard
+            jobId={job.id}
+            jobStatus={job.status as JobStatus}
+            jobTitle={job.service}
+            onStatusTransitioned={() => loadJob(false)}
           />
         ) : null}
 

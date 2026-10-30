@@ -1,10 +1,10 @@
 /**
- * Dispatcher Live Map Viewport (Web Fallback)
+ * Dispatcher Live Map Viewport (Web)
  *
- * Web fallback for Expo Maps:
- * - Prevents runtime crashes from native requireNativeModule('ExpoMaps') on web.
- * - Displays an informative fallback container indicating native map support on iOS/Android.
- * - Truthfully reports the number of active markers and their status without inventing fake map tiles.
+ * Interactive web map viewport using OpenStreetMap:
+ * - Always renders the territory map so the owner has full visibility.
+ * - Renders active technician indicators with status colors.
+ * - Provides interactive pan/zoom OpenStreetMap tiles.
  */
 
 import React from 'react';
@@ -35,7 +35,7 @@ export interface LiveMapViewportProps {
 export function LiveMapViewport({
   style,
   items = [],
-  emptyState,
+  initialCoordinates,
   selectedWorkerId,
   onSelectMarker,
 }: LiveMapViewportProps) {
@@ -43,156 +43,168 @@ export function LiveMapViewport({
 
   const validLiveItems = items.filter(
     (item) =>
-      item.isLive &&
       item.workerLatitude !== null &&
       item.workerLongitude !== null &&
       !isNaN(item.workerLatitude) &&
       !isNaN(item.workerLongitude)
   );
 
-  if (validLiveItems.length === 0) {
-    if (emptyState) {
-      return <View style={[styles.container, style]}>{emptyState}</View>;
-    }
-    return (
-      <View
-        style={[
-          styles.container,
-          {
-            backgroundColor: theme.surfaceSecondary,
-            borderColor: theme.border,
-          },
-          style,
-        ]}>
-        <View
-          style={[
-            styles.neutralBadge,
-            { backgroundColor: theme.surface, borderColor: theme.border },
-          ]}>
-          <ThemedText type="caption" themeColor="textSecondary" style={{ fontWeight: '600' }}>
-            NO LIVE FIXES
-          </ThemedText>
-        </View>
-        <ThemedText type="bodyMedium" style={{ fontWeight: '600', marginTop: Spacing.xs }}>
-          No Active Worker Markers
-        </ThemedText>
-        <ThemedText
-          type="caption"
-          themeColor="textSecondary"
-          style={{ textAlign: 'center', maxWidth: 360 }}>
-          Live markers appear when technicians enter field travel (Travelling) or arrive on site with active GPS telemetry.
-        </ThemedText>
-      </View>
-    );
+  // Calculate center coordinates
+  let centerLat = 37.7749;
+  let centerLon = -122.4194;
+
+  if (initialCoordinates) {
+    centerLat = initialCoordinates.latitude;
+    centerLon = initialCoordinates.longitude;
+  } else if (validLiveItems.length > 0) {
+    centerLat =
+      validLiveItems.reduce((acc, curr) => acc + curr.workerLatitude!, 0) / validLiveItems.length;
+    centerLon =
+      validLiveItems.reduce((acc, curr) => acc + curr.workerLongitude!, 0) / validLiveItems.length;
   }
+
+  const osmSrc = `https://www.openstreetmap.org/export/embed.html?bbox=${centerLon - 0.04}%2C${
+    centerLat - 0.03
+  }%2C${centerLon + 0.04}%2C${centerLat + 0.03}&layer=mapnik&marker=${centerLat}%2C${centerLon}`;
 
   return (
     <View
       style={[
-        styles.container,
+        styles.webContainer,
         {
           backgroundColor: theme.surfaceSecondary,
           borderColor: theme.border,
         },
         style,
       ]}>
-      <View style={styles.badge}>
-        <ThemedText type="caption" style={{ color: Palette.blueText, fontWeight: '600' }}>
-          LIVE WEB VIEWPORT • {validLiveItems.length} ACTIVE FIX{validLiveItems.length === 1 ? '' : 'ES'}
-        </ThemedText>
-      </View>
-      <ThemedText type="bodyMedium" style={{ fontWeight: '600', marginTop: Spacing.xs }}>
-        Native Map (Google Maps on Android / Apple Maps on iOS)
-      </ThemedText>
-      <ThemedText
-        type="caption"
-        themeColor="textSecondary"
-        style={{ textAlign: 'center', maxWidth: 420 }}>
-        The interactive live territory map renders natively on mobile devices. Review real-time worker telemetry and destinations below.
-      </ThemedText>
+      {/* Mini Marker Indicators Bar (if active workers exist) */}
+      {validLiveItems.length > 0 ? (
+        <View style={styles.markersSummary}>
+          {validLiveItems.map((item) => {
+            const statusLabel = getMapLifecycleStatusLabel(item.jobStatus);
+            let color =
+              item.jobStatus && item.jobStatus in MAP_STATUS_COLORS
+                ? MAP_STATUS_COLORS[item.jobStatus as keyof typeof MAP_STATUS_COLORS]
+                : '#16A34A';
 
-      {/* Mini Marker Indicators */}
-      <View style={styles.markersSummary}>
-        {validLiveItems.map((item) => {
-          const statusLabel = getMapLifecycleStatusLabel(item.jobStatus);
-          const color =
-            item.jobStatus && item.jobStatus in MAP_STATUS_COLORS
-              ? MAP_STATUS_COLORS[item.jobStatus as keyof typeof MAP_STATUS_COLORS]
-              : '#1D4ED8';
+            if (item.isStale) {
+              color = '#D97706';
+            }
 
-          const isSelected = selectedWorkerId === item.workerId;
+            const isSelected = selectedWorkerId === item.workerId;
 
-          return (
-            <Pressable
-              key={item.workerId}
-              onPress={() => onSelectMarker?.(item.workerId)}
-              style={[
-                styles.markerTag,
-                {
-                  borderColor: isSelected ? Palette.blueText : theme.border,
-                  backgroundColor: isSelected ? Palette.blueBg : theme.surface,
-                  borderWidth: isSelected ? 2 : 1,
-                },
-              ]}>
-              <View style={[styles.markerDot, { backgroundColor: color }]} />
-              <ThemedText type="caption" style={{ fontWeight: '600' }}>
-                {item.workerName}
+            return (
+              <Pressable
+                key={item.workerId}
+                onPress={() => onSelectMarker?.(item.workerId)}
+                style={[
+                  styles.markerTag,
+                  {
+                    borderColor: isSelected ? Palette.blueText : theme.border,
+                    backgroundColor: isSelected ? Palette.blueBg : theme.surface,
+                    borderWidth: isSelected ? 2 : 1,
+                  },
+                ]}>
+                <View style={[styles.markerDot, { backgroundColor: color }]} />
+                <ThemedText type="caption" style={{ fontWeight: '600' }}>
+                  {item.workerName}
+                </ThemedText>
+                <ThemedText type="caption" style={{ color }}>
+                  ({statusLabel})
+                </ThemedText>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+
+      {/* Interactive Web Map Viewport */}
+      <View style={styles.iframeWrapper}>
+        <iframe
+          title="Owner Live Territory Map"
+          width="100%"
+          height="100%"
+          style={{ border: 'none', borderRadius: 8 }}
+          src={osmSrc}
+        />
+
+        {/* Floating Status Pill */}
+        <View style={styles.floatingOverlay}>
+          {validLiveItems.length > 0 ? (
+            <View style={[styles.statusBadge, { backgroundColor: theme.surface }]}>
+              <View style={[styles.pulsingDot, { backgroundColor: Palette.blueText }]} />
+              <ThemedText type="caption" style={{ fontWeight: '700', color: Palette.blueText }}>
+                {validLiveItems.length} LIVE TECHNICIAN{validLiveItems.length === 1 ? '' : 'S'}
               </ThemedText>
-              <ThemedText type="caption" style={{ color }}>
-                ({statusLabel})
+            </View>
+          ) : (
+            <View style={[styles.statusBadge, { backgroundColor: theme.surface }]}>
+              <ThemedText type="caption" style={{ fontWeight: '600', color: theme.textSecondary }}>
+                📍 Territory Map • 0 Technicians Currently Active
               </ThemedText>
-            </Pressable>
-          );
-        })}
+            </View>
+          )}
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    minHeight: 240,
+  webContainer: {
+    height: 340,
     borderRadius: Radii.md,
     borderWidth: 1,
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: Spacing.base,
-    gap: Spacing.xs,
-  },
-  badge: {
-    backgroundColor: Palette.blueBg,
-    borderColor: Palette.blueBorder,
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: Radii.pill,
-  },
-  neutralBadge: {
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: Radii.pill,
+    overflow: 'hidden',
+    padding: Spacing.xs,
   },
   markersSummary: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.xs,
-    justifyContent: 'center',
-    marginTop: Spacing.xs,
+    paddingBottom: Spacing.xs,
   },
   markerTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: Radii.pill,
-    borderWidth: 1,
+    gap: 6,
   },
   markerDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  iframeWrapper: {
+    flex: 1,
+    borderRadius: Radii.sm,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  floatingOverlay: {
+    position: 'absolute',
+    top: Spacing.xs,
+    left: Spacing.xs,
+    right: Spacing.xs,
+    alignItems: 'center',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 5,
+    borderRadius: Radii.full,
+    shadowColor: '#000000',
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  pulsingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
 });

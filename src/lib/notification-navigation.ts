@@ -9,7 +9,7 @@
  * 5. Safe payload validation and role-correct routing.
  */
 
-import * as Notifications from 'expo-notifications';
+import type { EventSubscription } from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import {
@@ -25,6 +25,15 @@ import {
 import { logger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 
+let Notifications: typeof import('expo-notifications') | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  Notifications = require('expo-notifications');
+} catch (err) {
+  logger.warn('NotificationNavigation', 'expo-notifications native module unavailable in this environment (e.g. Expo Go):', err);
+  Notifications = null;
+}
+
 export {
   ForegroundNotificationAlert,
   NotificationDeepLinkOptions,
@@ -39,11 +48,11 @@ export {
 export function setupNotificationDeepLinking(
   options: NotificationDeepLinkOptions
 ): { unsubscribe: () => void } {
-  if (Platform.OS === 'web') {
+  if (Platform.OS === 'web' || !Notifications) {
     return { unsubscribe: () => {} };
   }
 
-  const subscriptions: Notifications.EventSubscription[] = [];
+  const subscriptions: EventSubscription[] = [];
 
   try {
     // 1. Cold-start check: Did the user launch the terminated app by tapping a notification?

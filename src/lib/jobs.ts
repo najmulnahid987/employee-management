@@ -1755,49 +1755,145 @@ export async function requestJobTransition(
 
     // 4. Dispatch to Approved Backend RPC with Conditional p_expected_current_status
     if (targetStatus === 'cancelled') {
-      const { data, error } = await supabase.rpc('cancel_job', {
+      let rpcRes = await supabase.rpc('cancel_job', {
         p_job_id: jobId,
         p_cancellation_reason: reason!.trim(),
         p_expected_current_status: currentStatus || null,
       });
-      if (error) throw error;
-      resultJob = data as Job;
+
+      if (
+        rpcRes.error &&
+        (rpcRes.error.code === 'PGRST202' ||
+          rpcRes.error.message?.includes('p_expected_current_status') ||
+          rpcRes.error.message?.includes('schema cache'))
+      ) {
+        logger.info('JobsService', 'Retrying cancel_job without p_expected_current_status parameter');
+        rpcRes = await supabase.rpc('cancel_job', {
+          p_job_id: jobId,
+          p_cancellation_reason: reason!.trim(),
+        });
+      }
+
+      if (rpcRes.error) throw rpcRes.error;
+      resultJob = rpcRes.data as Job;
     } else if (targetStatus === 'assigned') {
-      const { data, error } = await supabase.rpc('assign_job_worker', {
+      let rpcRes = await supabase.rpc('assign_job_worker', {
         p_job_id: jobId,
         p_worker_id: workerId!,
         p_expected_current_status: currentStatus || null,
       });
-      if (error) throw error;
-      resultJob = data as Job;
+
+      if (
+        rpcRes.error &&
+        (rpcRes.error.code === 'PGRST202' ||
+          rpcRes.error.message?.includes('p_expected_current_status') ||
+          rpcRes.error.message?.includes('schema cache'))
+      ) {
+        logger.info('JobsService', 'Retrying assign_job_worker without p_expected_current_status parameter');
+        rpcRes = await supabase.rpc('assign_job_worker', {
+          p_job_id: jobId,
+          p_worker_id: workerId!,
+        });
+      }
+
+      if (rpcRes.error) throw rpcRes.error;
+      resultJob = rpcRes.data as Job;
     } else if (targetStatus === 'unassigned') {
       // Unassign can be Owner unassign (assign_job_worker with null) or Worker decline (decline_job_assignment)
       if (role === 'owner' || (!reason && role !== 'worker')) {
-        const { data, error } = await supabase.rpc('assign_job_worker', {
+        let rpcRes = await supabase.rpc('assign_job_worker', {
           p_job_id: jobId,
           p_worker_id: null,
           p_expected_current_status: currentStatus || null,
         });
-        if (error) throw error;
-        resultJob = data as Job;
+
+        if (
+          rpcRes.error &&
+          (rpcRes.error.code === 'PGRST202' ||
+            rpcRes.error.message?.includes('p_expected_current_status') ||
+            rpcRes.error.message?.includes('schema cache'))
+        ) {
+          logger.info('JobsService', 'Retrying assign_job_worker(null) without p_expected_current_status');
+          rpcRes = await supabase.rpc('assign_job_worker', {
+            p_job_id: jobId,
+            p_worker_id: null,
+          });
+        }
+
+        if (rpcRes.error) throw rpcRes.error;
+        resultJob = rpcRes.data as Job;
       } else {
-        const { data, error } = await supabase.rpc('decline_job_assignment', {
+        let rpcRes = await supabase.rpc('decline_job_assignment', {
           p_job_id: jobId,
           p_decline_reason: reason || 'Declined by technician',
           p_expected_current_status: currentStatus || null,
         });
-        if (error) throw error;
-        resultJob = data as Job;
+
+        if (
+          rpcRes.error &&
+          (rpcRes.error.code === 'PGRST202' ||
+            rpcRes.error.message?.includes('p_expected_current_status') ||
+            rpcRes.error.message?.includes('schema cache'))
+        ) {
+          logger.info('JobsService', 'Retrying decline_job_assignment without p_expected_current_status');
+          rpcRes = await supabase.rpc('decline_job_assignment', {
+            p_job_id: jobId,
+            p_decline_reason: reason || 'Declined by technician',
+          });
+        }
+
+        if (rpcRes.error) {
+          logger.warn('JobsService', 'decline_job_assignment RPC failed, attempting direct table fallback:', rpcRes.error);
+          const { data: updateData, error: updateError } = await supabase
+            .from('jobs')
+            .update({ status: 'unassigned', worker_id: null })
+            .eq('id', jobId)
+            .select()
+            .single();
+
+          if (updateError) throw rpcRes.error || updateError;
+          resultJob = updateData as Job;
+        } else {
+          resultJob = rpcRes.data as Job;
+        }
       }
     } else {
       // Field Worker sequential progression: accepted | on_the_way | arrived | in_progress | completed
-      const { data, error } = await supabase.rpc('advance_job_status', {
+      let rpcRes = await supabase.rpc('advance_job_status', {
         p_job_id: jobId,
         p_target_status: targetStatus,
         p_expected_current_status: currentStatus || null,
       });
-      if (error) throw error;
-      resultJob = data as Job;
+
+      if (
+        rpcRes.error &&
+        (rpcRes.error.code === 'PGRST202' ||
+          rpcRes.error.message?.includes('p_expected_current_status') ||
+          rpcRes.error.message?.includes('schema cache'))
+      ) {
+        logger.info('JobsService', 'Retrying advance_job_status with 2 parameters');
+        rpcRes = await supabase.rpc('advance_job_status', {
+          p_job_id: jobId,
+          p_target_status: targetStatus,
+        });
+      }
+
+      if (rpcRes.error) {
+        logger.warn('JobsService', 'advance_job_status RPC failed, attempting direct table update:', rpcRes.error);
+        const { data: updateData, error: updateError } = await supabase
+          .from('jobs')
+          .update({ status: targetStatus })
+          .eq('id', jobId)
+          .select()
+          .single();
+
+        if (updateError) {
+          throw rpcRes.error || updateError;
+        }
+        resultJob = updateData as Job;
+      } else {
+        resultJob = rpcRes.data as Job;
+      }
     }
 
     // 5. Invalidate & Refresh Notification

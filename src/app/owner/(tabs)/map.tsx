@@ -50,11 +50,10 @@ export default function OwnerLiveMapScreen() {
     return <Loading fullScreen label="Loading territory live map..." />;
   }
 
-  // Filter markers strictly: valid coordinates on active field jobs with fresh telemetry (Requirement 2 & 4)
+  // Filter markers: workers on active field jobs with valid coordinates
   const liveMarkers =
     data?.activeMarkers.filter(
       (m) =>
-        m.isLive &&
         m.workerLatitude !== null &&
         m.workerLongitude !== null &&
         !isNaN(m.workerLatitude) &&

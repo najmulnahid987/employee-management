@@ -142,3 +142,47 @@ export async function geocodeAddress(
     return { coordinates: null, error: errorMessage, source: 'fallback' };
   }
 }
+
+export interface ReverseGeocodeResult {
+  address: string | null;
+  error?: string;
+}
+
+/**
+ * Reverse geocodes latitude/longitude coordinates to a readable address string.
+ */
+export async function reverseGeocodeCoordinates(
+  latitude: number,
+  longitude: number,
+  timeoutMs: number = 3000
+): Promise<ReverseGeocodeResult> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Dispatcher-Mobile/1.0 (contact: dispatcher-app@example.com)',
+      },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return { address: null, error: `Reverse geocoding error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    if (data?.display_name) {
+      return { address: data.display_name };
+    }
+    return { address: null };
+  } catch {
+    clearTimeout(timeoutId);
+    return { address: null, error: 'Reverse geocoding timed out or failed' };
+  }
+}
