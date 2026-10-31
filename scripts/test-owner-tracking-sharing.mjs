@@ -90,10 +90,10 @@ test('M13.7 Tracking URL Construction & Format Hygiene', async (t) => {
 });
 
 // =============================================================================
-// Test Suite 3: Owner Job Details Screen UI & Workflow Verification
+// Test Suite 3: Owner Job Details Screen UI Verification (Customer Tracking Option Removed)
 // =============================================================================
 
-test('M13.7 Owner Job Details Screen UI & Workflow Verification', async (t) => {
+test('M13.7 Owner Job Details Screen UI Verification (Tracking Removed)', async (t) => {
   const jobDetailsPath = path.join(
     projectRoot,
     'src/app/owner/job-details.tsx'
@@ -101,34 +101,34 @@ test('M13.7 Owner Job Details Screen UI & Workflow Verification', async (t) => {
   assert.ok(fs.existsSync(jobDetailsPath), 'job-details.tsx must exist');
   const content = fs.readFileSync(jobDetailsPath, 'utf8');
 
-  await t.test('contains Create Tracking Link primary button only when eligible', () => {
-    assert.match(
-      content,
-      /<Button[^>]*label=["']Create Tracking Link["']/,
-      'Owner screen must have a clear "Create Tracking Link" action'
+  await t.test('does NOT contain Create Tracking Link action', () => {
+    assert.equal(
+      content.includes('label="Create Tracking Link"'),
+      false,
+      'Owner screen must not have "Create Tracking Link" action'
     );
   });
 
-  await t.test('provides Copy Link and native Share Link actions after issuance', () => {
-    assert.match(
-      content,
-      /label=["']Copy Link["']/,
-      'Must provide a Copy Link action'
+  await t.test('does NOT contain Customer Tracking card or sharing actions', () => {
+    assert.equal(
+      content.includes('<ThemedText type="headline">Customer Tracking</ThemedText>'),
+      false,
+      'Customer Tracking section header must not be rendered'
     );
-    assert.match(
-      content,
-      /label=["']Share Link["']/,
-      'Must provide a Share Link action'
+    assert.equal(
+      content.includes('label="Copy Link"'),
+      false,
+      'Must not render Copy Link action'
     );
-    assert.match(
-      content,
-      /Clipboard\.setStringAsync|navigator\.clipboard\.writeText/,
-      'Copy Link action must use clipboard API'
+    assert.equal(
+      content.includes('label="Share Link"'),
+      false,
+      'Must not render Share Link action'
     );
-    assert.match(
-      content,
-      /Share\.share/,
-      'Share Link action must use native platform Share API'
+    assert.equal(
+      content.includes('label="Create Replacement Link"'),
+      false,
+      'Must not render replacement link action'
     );
   });
 
@@ -137,55 +137,6 @@ test('M13.7 Owner Job Details Screen UI & Workflow Verification', async (t) => {
       content.includes('sms:') || content.includes('Linking.openURL(smsUrl)'),
       false,
       'Must not automatically launch SMS or external messaging services'
-    );
-  });
-
-  await t.test('displays expiry time and security/privacy notice', () => {
-    assert.match(
-      content,
-      /Expires:\s*\{new Date\(trackingSession\.expiresAt\)/,
-      'Must display tracking link expiration timestamp'
-    );
-    assert.match(
-      content,
-      /Anyone with this link can view the technician's arrival status/,
-      'Must display notice explaining limited information visible to link possessor'
-    );
-    assert.match(
-      content,
-      /Internal notes and customer contact details are never revealed/,
-      'Must assure owner that customer contact details and notes are withheld'
-    );
-  });
-
-  await t.test('explains that replacement link invalidates earlier link and provides rotation action', () => {
-    assert.match(
-      content,
-      /label=["']Create Replacement Link["']/,
-      'Must provide Create Replacement Link action'
-    );
-    assert.match(
-      content,
-      /Generating a replacement link immediately invalidates the earlier link/,
-      'Must explain that replacement invalidates the earlier link'
-    );
-    assert.match(
-      content,
-      /Create Replacement Link\?/,
-      'Must show confirmation alert before rotating link'
-    );
-  });
-
-  await t.test('clears local tracking session state if job transitions to terminal or unassigned', () => {
-    assert.match(
-      content,
-      /job\.status === 'completed' \|\| job\.status === 'cancelled' \|\| job\.status === 'unassigned' \|\| !job\.worker_id/,
-      'Must check for job transition to terminal or unassigned status'
-    );
-    assert.match(
-      content,
-      /setTrackingSession\(null\)/,
-      'Must immediately clear local tracking session state if job becomes terminal or unassigned'
     );
   });
 });

@@ -1,7 +1,6 @@
-import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Platform, RefreshControl, Share, StyleSheet, View } from 'react-native';
+import { Alert, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card, Loading, ScreenContainer, StatusBadge } from '@/components/ui';
@@ -23,12 +22,6 @@ import {
 } from '@/lib/jobs';
 import { isTerminalJobStatus } from '@/lib/lifecycle';
 import { subscribeToJobSignals } from '@/lib/realtime';
-import {
-  buildFullTrackingUrl,
-  generateTrackingSession,
-  IssuedTrackingSession,
-  revokeTrackingSession,
-} from '@/lib/tracking-session-service';
 
 export default function OwnerJobDetailsScreen() {
   const theme = useTheme();
@@ -52,11 +45,6 @@ export default function OwnerJobDetailsScreen() {
   const [isWorkerSheetVisible, setIsWorkerSheetVisible] = useState<boolean>(false);
   const [assignableWorkers, setAssignableWorkers] = useState<AssignableWorker[]>([]);
   const [isLoadingWorkers, setIsLoadingWorkers] = useState<boolean>(false);
-
-  // Customer Tracking Session State
-  const [trackingSession, setTrackingSession] = useState<IssuedTrackingSession | null>(null);
-  const [isGeneratingTracking, setIsGeneratingTracking] = useState<boolean>(false);
-  const [isRevokingTracking, setIsRevokingTracking] = useState<boolean>(false);
 
   const loadJob = useCallback(
     async (isPullRefresh: boolean = false) => {
@@ -297,131 +285,6 @@ export default function OwnerJobDetailsScreen() {
     );
   };
 
-  // Clear local tracking session state if job enters terminal or unassigned status
-  useEffect(() => {
-    if (job && (job.status === 'completed' || job.status === 'cancelled' || job.status === 'unassigned' || !job.worker_id)) {
-      setTrackingSession(null);
-    }
-  }, [job]);
-
-  const handleCreateTrackingLink = async () => {
-    if (!job || actionLockRef.current) return;
-    actionLockRef.current = true;
-    setIsGeneratingTracking(true);
-    try {
-      const res = await generateTrackingSession(job.id);
-      if (res.success && res.session) {
-        setTrackingSession(res.session);
-        Alert.alert(
-          'Tracking Link Created',
-          'A secure customer tracking link has been issued. You can now copy or share it with your customer.'
-        );
-      } else {
-        Alert.alert('Unable to Create Link', res.error || 'Failed to generate tracking session.');
-      }
-    } finally {
-      actionLockRef.current = false;
-      setIsGeneratingTracking(false);
-    }
-  };
-
-  const handleCopyTrackingLink = async () => {
-    if (!trackingSession) return;
-    const fullUrl = buildFullTrackingUrl(trackingSession.rawToken || trackingSession.trackingUrl);
-    try {
-      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
-        await navigator.clipboard.writeText(fullUrl);
-      } else {
-        await Clipboard.setStringAsync(fullUrl);
-      }
-      Alert.alert('Link Copied', 'Customer tracking link copied to clipboard.');
-    } catch {
-      Alert.alert('Copy Failed', 'Unable to copy tracking link to clipboard.');
-    }
-  };
-
-  const handleRotateTrackingLink = () => {
-    if (!job || actionLockRef.current) return;
-    Alert.alert(
-      'Create Replacement Link?',
-      'Generating a replacement link will permanently invalidate the earlier link. Any customer using the previous link will immediately lose tracking access.\n\nDo you want to continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Replace & Invalidate Earlier Link',
-          style: 'destructive',
-          onPress: async () => {
-            if (actionLockRef.current) return;
-            actionLockRef.current = true;
-            setIsGeneratingTracking(true);
-            try {
-              const res = await generateTrackingSession(job.id);
-              if (res.success && res.session) {
-                setTrackingSession(res.session);
-                Alert.alert(
-                  'Replacement Link Issued',
-                  'A new tracking link has been issued. The previous link has been permanently revoked.'
-                );
-              } else {
-                Alert.alert('Unable to Replace Link', res.error || 'Failed to rotate tracking session.');
-              }
-            } finally {
-              actionLockRef.current = false;
-              setIsGeneratingTracking(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleRevokeTrackingLink = () => {
-    if (!job || actionLockRef.current) return;
-    Alert.alert(
-      'Revoke Tracking Link?',
-      'This will immediately terminate customer tracking access for this visit. The customer tracking page will stop displaying live information.\n\nAre you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Revoke Link',
-          style: 'destructive',
-          onPress: async () => {
-            if (actionLockRef.current) return;
-            actionLockRef.current = true;
-            setIsRevokingTracking(true);
-            try {
-              const res = await revokeTrackingSession(job.id, 'owner_manual_revocation');
-              if (res.success) {
-                setTrackingSession(null);
-                Alert.alert('Link Revoked', 'The customer tracking link has been deactivated.');
-              } else {
-                Alert.alert('Unable to Revoke Link', res.error || 'Failed to revoke tracking session.');
-              }
-            } finally {
-              actionLockRef.current = false;
-              setIsRevokingTracking(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleShareTrackingLink = async () => {
-    if (!trackingSession || !job) return;
-    const fullUrl = buildFullTrackingUrl(trackingSession.rawToken || trackingSession.trackingUrl);
-    const message = `Track your ${job.service} appointment live: ${fullUrl}`;
-    try {
-      await Share.share({
-        title: `Live Tracking for ${job.service}`,
-        message,
-        url: fullUrl,
-      });
-    } catch {
-      // User dismissed share sheet or share cancelled
-    }
-  };
-
   if (isLoading && !isRefreshing) {
     return <Loading fullScreen label="Loading service job..." />;
   }
@@ -596,129 +459,6 @@ export default function OwnerJobDetailsScreen() {
               </ThemedText>
             </Card>
           ) : null}
-
-          {/* Customer Tracking Section */}
-          <Card variant="surface" style={styles.card}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.xs }}>
-              <ThemedText type="headline">Customer Tracking</ThemedText>
-              {trackingSession ? (
-                <View
-                  style={{
-                    backgroundColor: trackingSession.isActivated ? Palette.greenBg : Palette.blueBg,
-                    borderColor: trackingSession.isActivated ? Palette.greenBorder : Palette.blueBorder,
-                    borderWidth: 1,
-                    paddingHorizontal: 8,
-                    paddingVertical: 2,
-                    borderRadius: Radii.pill,
-                  }}>
-                  <ThemedText
-                    type="caption"
-                    style={{
-                      color: trackingSession.isActivated ? Palette.greenText : Palette.blueText,
-                      fontWeight: '600',
-                    }}>
-                    {trackingSession.isActivated ? 'LIVE TRACKING ACTIVE' : 'PENDING TECHNICIAN TRAVEL'}
-                  </ThemedText>
-                </View>
-              ) : null}
-            </View>
-
-            {isTerminal ? (
-              <ThemedText type="caption" themeColor="textSecondary">
-                Customer tracking is closed for completed and cancelled jobs.
-              </ThemedText>
-            ) : isUnassigned ? (
-              <ThemedText type="caption" themeColor="textSecondary">
-                Assign an active technician above to enable customer tracking link generation.
-              </ThemedText>
-            ) : trackingSession ? (
-              <View style={{ gap: Spacing.sm }}>
-                <View
-                  style={{
-                    backgroundColor: theme.surfaceSecondary,
-                    padding: Spacing.sm,
-                    borderRadius: Radii.sm,
-                    borderWidth: 1,
-                    borderColor: theme.border,
-                  }}>
-                  <ThemedText type="captionMedium" themeColor="textSecondary">
-                    CUSTOMER TRACKING LINK
-                  </ThemedText>
-                  <ThemedText
-                    type="caption"
-                    style={{ fontFamily: 'monospace', marginTop: 2 }}>
-                    {buildFullTrackingUrl(trackingSession.rawToken || trackingSession.trackingUrl)}
-                  </ThemedText>
-                  <ThemedText type="caption" themeColor="textSecondary" style={{ marginTop: 4, fontSize: 11 }}>
-                    Expires: {new Date(trackingSession.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({new Date(trackingSession.expiresAt).toLocaleDateString()})
-                  </ThemedText>
-                </View>
-
-                <ThemedText type="caption" themeColor="textSecondary" style={{ fontSize: 12, lineHeight: 16 }}>
-                  Anyone with this link can view the technician's arrival status and real-time location. Internal notes and customer contact details are never revealed.
-                </ThemedText>
-
-                <ThemedText type="caption" themeColor="textSecondary" style={{ fontSize: 11, fontStyle: 'italic' }}>
-                  Notice: Generating a replacement link immediately invalidates the earlier link.
-                </ThemedText>
-
-                <View style={{ flexDirection: 'row', gap: Spacing.xs }}>
-                  <View style={{ flex: 1 }}>
-                    <Button
-                      label="Copy Link"
-                      variant="primary"
-                      size="sm"
-                      fullWidth
-                      onPress={handleCopyTrackingLink}
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Button
-                      label="Share Link"
-                      variant="secondary"
-                      size="sm"
-                      fullWidth
-                      onPress={handleShareTrackingLink}
-                    />
-                  </View>
-                </View>
-
-                <Button
-                  label="Create Replacement Link"
-                  variant="outline"
-                  size="sm"
-                  fullWidth
-                  loading={isGeneratingTracking}
-                  disabled={isActionInProgress || isRevokingTracking}
-                  onPress={handleRotateTrackingLink}
-                />
-
-                <Button
-                  label="Revoke Link"
-                  variant="outline"
-                  size="sm"
-                  fullWidth
-                  loading={isRevokingTracking}
-                  disabled={isActionInProgress || isGeneratingTracking}
-                  onPress={handleRevokeTrackingLink}
-                />
-              </View>
-            ) : (
-              <View style={{ gap: Spacing.xs }}>
-                <ThemedText type="caption" themeColor="textSecondary">
-                  Create a secure, non-guessable link for your customer to track technician arrival in real time.
-                </ThemedText>
-                <Button
-                  label="Create Tracking Link"
-                  variant="primary"
-                  size="sm"
-                  loading={isGeneratingTracking}
-                  disabled={isActionInProgress}
-                  onPress={handleCreateTrackingLink}
-                />
-              </View>
-            )}
-          </Card>
 
           {/* Activity Event Timeline */}
           <JobEventTimeline
