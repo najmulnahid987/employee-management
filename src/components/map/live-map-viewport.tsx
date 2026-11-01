@@ -184,11 +184,19 @@ export function LiveMapViewport({
           showsMyLocationButton={false}
           showsCompass={true}>
           {validLiveItems.map((item) => {
-            const statusLabel = getMapLifecycleStatusLabel(item.jobStatus);
+            const isFieldVisit =
+              item.jobStatus === 'on_the_way' ||
+              item.jobStatus === 'arrived' ||
+              item.jobStatus === 'in_progress';
+
+            const statusLabel = isFieldVisit
+              ? getMapLifecycleStatusLabel(item.jobStatus)
+              : 'Active';
+
             let color =
-              item.jobStatus && item.jobStatus in MAP_STATUS_COLORS
+              isFieldVisit && item.jobStatus && item.jobStatus in MAP_STATUS_COLORS
                 ? MAP_STATUS_COLORS[item.jobStatus as keyof typeof MAP_STATUS_COLORS]
-                : '#16A34A';
+                : MAP_STATUS_COLORS.active;
 
             if (item.isStale) {
               color = '#D97706';
@@ -208,7 +216,7 @@ export function LiveMapViewport({
                 description={
                   item.jobService
                     ? `${item.jobService}${item.jobAddress ? ` — ${item.jobAddress}` : ''}`
-                    : item.jobAddress || ''
+                    : item.jobAddress || 'Active on standby'
                 }
                 pinColor={isSelected ? '#171717' : color}
                 onPress={() => {

@@ -87,37 +87,40 @@ export class ForegroundLocationTracker {
   }
 
   /**
-   * Starts or reconfigures foreground GPS tracking for the specified job and lifecycle status.
+   * Starts or reconfigures foreground GPS tracking for the specified job and lifecycle status,
+   * or starts ambient standby tracking when jobId is null/omitted.
    */
-  public async startTracking(jobId: string, status: JobStatus): Promise<boolean> {
-    if (!jobId) {
-      this.stopTracking();
-      return false;
+  public async startTracking(
+    jobId?: string | null,
+    status?: JobStatus | 'ambient' | null
+  ): Promise<boolean> {
+    // Determine target frequency mode based on lifecycle or ambient tracking
+    let targetMode: 'HIGH_FREQUENCY' | 'LOW_FREQUENCY';
+    if (jobId) {
+      if (status === 'on_the_way') {
+        targetMode = 'HIGH_FREQUENCY';
+      } else if (status === 'arrived' || status === 'in_progress') {
+        targetMode = 'LOW_FREQUENCY';
+      } else {
+        targetMode = 'LOW_FREQUENCY';
+      }
+    } else {
+      targetMode = 'LOW_FREQUENCY';
     }
 
-    // Determine target frequency mode based on M9 lifecycle
-    let targetMode: 'HIGH_FREQUENCY' | 'LOW_FREQUENCY';
-    if (status === 'on_the_way') {
-      targetMode = 'HIGH_FREQUENCY';
-    } else if (status === 'arrived' || status === 'in_progress') {
-      targetMode = 'LOW_FREQUENCY';
-    } else {
-      // Pre-travel or terminal: tracking must not run
-      this.stopTracking();
-      return false;
-    }
+    const normalizedJobId = jobId || null;
 
     // If already tracking the same job in the same mode, no reconfiguration needed
     if (
       this.watcherSubscription &&
-      this.activeJobId === jobId &&
+      this.activeJobId === normalizedJobId &&
       this.currentMode === targetMode
     ) {
       return true;
     }
 
     // If switching jobs, reset previous positions so no stale coordinates are retained
-    if (this.activeJobId !== jobId) {
+    if (this.activeJobId !== normalizedJobId) {
       this.lastPosition = null;
       this.lastSubmittedPosition = null;
       this.lastSubmittedTimestampMs = 0;
@@ -126,7 +129,7 @@ export class ForegroundLocationTracker {
     }
 
     this.coalescingQueue?.reset();
-    this.activeJobId = jobId;
+    this.activeJobId = normalizedJobId;
     this.currentMode = targetMode;
     this.currentError = null;
 
@@ -179,7 +182,7 @@ export class ForegroundLocationTracker {
    * Processes a new device position fix.
    */
   private handlePositionFix(location: Location.LocationObject): void {
-    if (!this.activeJobId || !location?.coords) return;
+    if (!this.watcherSubscription || !location?.coords) return;
 
     const candidate: RawCoordinates = {
       latitude: location.coords.latitude,
@@ -222,7 +225,7 @@ export class ForegroundLocationTracker {
    */
   private async executeServerWrite(coords: RawCoordinates): Promise<boolean> {
     const currentJobId = this.activeJobId;
-    if (!currentJobId || this.currentMode === 'INACTIVE' || !this.watcherSubscription) {
+    if (this.currentMode === 'INACTIVE' || !this.watcherSubscription) {
       return false;
     }
 
@@ -230,7 +233,7 @@ export class ForegroundLocationTracker {
 
     try {
       const { error } = await supabase.rpc('record_worker_location', {
-        p_job_id: currentJobId,
+        p_job_id: currentJobId || null,
         p_latitude: coords.latitude,
         p_longitude: coords.longitude,
         p_accuracy: coords.accuracy,
@@ -252,7 +255,9 @@ export class ForegroundLocationTracker {
           error.code === '42501' ||
           error.code === 'P0001'
         ) {
-          this.currentError = 'Job is no longer in an active tracking stage.';
+          this.currentError = currentJobId
+            ? 'Job is no longer in an active tracking stage.'
+            : 'Location tracking not authorized or account is inactive.';
           this.stopTracking();
           return false;
         }

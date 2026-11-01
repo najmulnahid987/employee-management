@@ -12,7 +12,6 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { isTrackingEligibleStatus } from './location-rules';
 import {
   buildOwnerLiveMapData,
   composeOwnerLiveMapData,
@@ -198,24 +197,17 @@ export async function fetchOwnerLiveMapData(
     }
 
     // -------------------------------------------------------------------------
-    // 4. Batched Query 3: Locations for Eligible Active Field Jobs
+    // 4. Batched Query 3: Locations for All Business Workers (Active Jobs & Standby)
     // -------------------------------------------------------------------------
-    const eligibleJobIds: string[] = [];
-    for (const [, job] of jobByWorkerId.entries()) {
-      if (isTrackingEligibleStatus(job.status)) {
-        eligibleJobIds.push(job.id);
-      }
-    }
-
+    const workerIds = workerProfiles.map((w) => w.id);
     const latestLocationByWorkerId = new Map<string, LocationRow>();
-
     let rawLocations: LocationRow[] = [];
 
-    if (eligibleJobIds.length > 0) {
+    if (workerIds.length > 0) {
       const { data: fetchedLocations, error: locationsErr } = await client
         .from('locations')
         .select('id, worker_id, job_id, latitude, longitude, accuracy, created_at')
-        .in('job_id', eligibleJobIds)
+        .in('worker_id', workerIds)
         .order('created_at', { ascending: false });
 
       if (locationsErr) {

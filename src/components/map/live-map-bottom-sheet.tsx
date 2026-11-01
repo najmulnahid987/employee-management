@@ -127,6 +127,18 @@ export function LiveMapBottomSheet({
                   </ThemedText>
                   {item.jobStatus ? (
                     <StatusBadge status={item.jobStatus} label={statusLabel} size="sm" />
+                  ) : item.isEligibleForLiveMarker ? (
+                    <View
+                      style={[
+                        styles.neutralBadge,
+                        { backgroundColor: Palette.purpleBg, borderColor: Palette.purpleBorder },
+                      ]}>
+                      <ThemedText
+                        type="caption"
+                        style={{ color: Palette.purpleText, fontWeight: '700' }}>
+                        ACTIVE
+                      </ThemedText>
+                    </View>
                   ) : (
                     <View
                       style={[
@@ -228,6 +240,32 @@ export function LiveMapBottomSheet({
                       {formatDistance(item.distanceToDestinationMeters)}
                     </ThemedText>
                   </View>
+                ) : null}
+              </Card>
+            ) : item.isEligibleForLiveMarker ? (
+              /* Active Technician on Standby */
+              <Card
+                variant="outline"
+                style={[
+                  styles.detailsCard,
+                  { backgroundColor: Palette.purpleBg, borderColor: Palette.purpleBorder },
+                ]}>
+                <ThemedText type="headline" style={{ color: Palette.purpleText }}>
+                  Active • Sharing Location
+                </ThemedText>
+                <ThemedText type="caption" themeColor="textSecondary">
+                  This technician is actively broadcasting their live location to territory dispatch.
+                  Available for assignment or scheduled work.
+                </ThemedText>
+                {onRefresh ? (
+                  <Button
+                    label={isRefreshing ? 'Refreshing...' : 'Refresh Status'}
+                    variant="outline"
+                    size="sm"
+                    onPress={onRefresh}
+                    disabled={isRefreshing}
+                    style={{ alignSelf: 'flex-start', marginTop: Spacing.xs }}
+                  />
                 ) : null}
               </Card>
             ) : (

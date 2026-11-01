@@ -38,6 +38,7 @@ export interface UseOwnerLiveMapResult {
 const INITIAL_SUMMARY: OwnerLiveMapSummary = {
   totalWorkers: 0,
   activeOnDuty: 0,
+  activeStandbyCount: 0,
   liveTracked: 0,
   staleTracked: 0,
   lowAccuracyCount: 0,

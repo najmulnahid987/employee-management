@@ -116,7 +116,7 @@ export async function handleBackgroundLocationFixes(
   // Transmit location to Supabase via the approved record_worker_location RPC
   try {
     const { error } = await supabase.rpc('record_worker_location', {
-      p_job_id: context.jobId,
+      p_job_id: context.jobId || null,
       p_latitude: candidate.latitude,
       p_longitude: candidate.longitude,
       p_accuracy: candidate.accuracy,
@@ -191,11 +191,12 @@ export async function checkHasBackgroundPermission(): Promise<boolean> {
  * cannot resume for terminal, reassigned, or unauthorized jobs.
  */
 export async function startBackgroundTrackingAsync(
-  jobId: string,
+  jobId: string | null | undefined,
   workerId: string,
-  status: JobStatus
+  status: JobStatus | 'ambient'
 ): Promise<boolean> {
-  if (!jobId || !workerId || !isEligibleForBackgroundTracking(status)) {
+  const normalizedJobId = jobId || null;
+  if (!workerId || !isEligibleForBackgroundTracking(status)) {
     await stopBackgroundTrackingAsync();
     return false;
   }
@@ -216,24 +217,38 @@ export async function startBackgroundTrackingAsync(
 
   // 3. Pre-flight check: verify actual database state before starting background task
   try {
-    const { data: job, error: jobErr } = await supabase
-      .from('jobs')
-      .select('id, status, worker_id')
-      .eq('id', jobId)
-      .maybeSingle();
+    if (normalizedJobId) {
+      const { data: job, error: jobErr } = await supabase
+        .from('jobs')
+        .select('id, status, worker_id')
+        .eq('id', normalizedJobId)
+        .maybeSingle();
 
-    if (
-      jobErr ||
-      !job ||
-      job.worker_id !== workerId ||
-      !isEligibleForBackgroundTracking(job.status)
-    ) {
-      logger.warn(
-        'BackgroundLocationTask',
-        `Pre-flight failed: job ${jobId} is not active/assigned in database.`
-      );
-      await stopBackgroundTrackingAsync();
-      return false;
+      if (
+        jobErr ||
+        !job ||
+        job.worker_id !== workerId ||
+        !isEligibleForBackgroundTracking(job.status)
+      ) {
+        logger.warn(
+          'BackgroundLocationTask',
+          `Pre-flight failed: job ${normalizedJobId} is not active/assigned in database.`
+        );
+        await stopBackgroundTrackingAsync();
+        return false;
+      }
+    } else {
+      const { data: profile, error: profErr } = await supabase
+        .from('profiles')
+        .select('id, is_active')
+        .eq('id', workerId)
+        .maybeSingle();
+
+      if (profErr || !profile || !profile.is_active) {
+        logger.warn('BackgroundLocationTask', 'Pre-flight failed: worker profile inactive or not found.');
+        await stopBackgroundTrackingAsync();
+        return false;
+      }
     }
   } catch (err) {
     logger.warn('BackgroundLocationTask', 'Pre-flight database check error:', err);
@@ -243,7 +258,7 @@ export async function startBackgroundTrackingAsync(
   const isRegistered = await TaskManager.isTaskRegisteredAsync(DISPATCHER_BACKGROUND_LOCATION_TASK);
   const activeContext = await getActiveBackgroundTrackingJob();
 
-  if (isRegistered && activeContext?.jobId === jobId && activeContext?.status === status) {
+  if (isRegistered && activeContext?.jobId === normalizedJobId && activeContext?.status === status) {
     return true;
   }
 
@@ -271,20 +286,20 @@ export async function startBackgroundTrackingAsync(
   };
 
   try {
-    // 7. Persist active job context before launching background listener
+    // 7. Persist active context before launching background listener
     await saveActiveBackgroundTrackingJob({
-      jobId,
+      jobId: normalizedJobId,
       workerId,
       status,
       startedAtMs: Date.now(),
-      lastRecordedCoords: activeContext?.jobId === jobId ? activeContext?.lastRecordedCoords : undefined,
-      lastRecordedTimestampMs: activeContext?.jobId === jobId ? activeContext?.lastRecordedTimestampMs : undefined,
+      lastRecordedCoords: activeContext?.jobId === normalizedJobId ? activeContext?.lastRecordedCoords : undefined,
+      lastRecordedTimestampMs: activeContext?.jobId === normalizedJobId ? activeContext?.lastRecordedTimestampMs : undefined,
     });
 
     // 8. Register background location task with OS
     await Location.startLocationUpdatesAsync(DISPATCHER_BACKGROUND_LOCATION_TASK, options);
 
-    logger.info('BackgroundLocationTask', `Started background tracking for ${jobId} (${status})`);
+    logger.info('BackgroundLocationTask', `Started background tracking for ${normalizedJobId ?? 'ambient'} (${status})`);
     return true;
   } catch (err) {
     logger.warn('BackgroundLocationTask', 'Failed to start background location updates:', err);

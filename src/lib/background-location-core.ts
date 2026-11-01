@@ -20,12 +20,12 @@ export const DISPATCHER_BACKGROUND_LOCATION_TASK = 'dispatcher-background-locati
 export const BACKGROUND_TRACKING_STORAGE_KEY = '@dispatcher/active_background_tracking';
 
 export interface ActiveBackgroundJobContext {
-  /** Active job identifier */
-  jobId: string;
+  /** Active job identifier (null if ambient standby tracking) */
+  jobId: string | null;
   /** Authenticated worker ID from session */
   workerId: string;
-  /** Current lifecycle status */
-  status: JobStatus;
+  /** Current lifecycle status or 'ambient' */
+  status: JobStatus | 'ambient';
   /** Epoch timestamp when tracking was initialized */
   startedAtMs: number;
   /** Epoch timestamp when the last successful upload occurred */
@@ -36,13 +36,12 @@ export interface ActiveBackgroundJobContext {
 
 /**
  * Returns true if the status permits background location tracking.
- * Strictly permitted during active field stages: 'on_the_way', 'arrived', 'in_progress'.
- * Strictly forbidden during pre-travel ('unassigned', 'assigned', 'accepted')
- * and terminal statuses ('completed', 'cancelled').
+ * Strictly permitted during active field stages: 'on_the_way', 'arrived', 'in_progress',
+ * or during 'ambient' standby location sharing.
  */
 export function isEligibleForBackgroundTracking(status: string | null | undefined): boolean {
   if (!status) return false;
-  return status === 'on_the_way' || status === 'arrived' || status === 'in_progress';
+  return status === 'on_the_way' || status === 'arrived' || status === 'in_progress' || status === 'ambient';
 }
 
 export interface ContextValidationResult {
@@ -64,8 +63,8 @@ export function validateBackgroundJobContext(
 
   const obj = raw as Partial<ActiveBackgroundJobContext>;
 
-  if (typeof obj.jobId !== 'string' || obj.jobId.trim().length === 0) {
-    return { isValid: false, reason: 'Missing or empty jobId in context.', context: null };
+  if (obj.jobId !== null && (typeof obj.jobId !== 'string' || obj.jobId.trim().length === 0)) {
+    return { isValid: false, reason: 'Invalid jobId in context.', context: null };
   }
 
   if (typeof obj.workerId !== 'string' || obj.workerId.trim().length === 0) {
@@ -114,25 +113,28 @@ export interface BackgroundLocationOptionsConfig {
 }
 
 /**
- * Builds platform-compliant background location options based on job status.
+ * Builds platform-compliant background location options based on job status or ambient mode.
  */
 export function buildBackgroundLocationOptionsConfig(
-  status: JobStatus
+  status: JobStatus | 'ambient'
 ): BackgroundLocationOptionsConfig {
   const isTravel = status === 'on_the_way';
+  const isAmbient = status === 'ambient';
 
   return {
     accuracyLevel: isTravel ? 'High' : 'Balanced',
-    timeIntervalMs: isTravel ? 30000 : 180000,
-    distanceIntervalMeters: isTravel ? 50 : 150,
-    deferredUpdatesIntervalMs: isTravel ? 30000 : 180000,
-    deferredUpdatesDistanceMeters: isTravel ? 50 : 150,
+    timeIntervalMs: isTravel ? 30000 : isAmbient ? 60000 : 180000,
+    distanceIntervalMeters: isTravel ? 50 : isAmbient ? 75 : 150,
+    deferredUpdatesIntervalMs: isTravel ? 30000 : isAmbient ? 60000 : 180000,
+    deferredUpdatesDistanceMeters: isTravel ? 50 : isAmbient ? 75 : 150,
     showsBackgroundLocationIndicator: true,
     pausesUpdatesAutomatically: false,
     foregroundService: {
-      notificationTitle: 'Dispatcher Active Visit',
+      notificationTitle: isAmbient ? 'Dispatcher Live Location' : 'Dispatcher Active Visit',
       notificationBody: isTravel
         ? 'Sharing live travel location with dispatch'
+        : isAmbient
+        ? 'Sharing live standby location with dispatch'
         : 'Sharing on-site location with dispatch',
       notificationColor: '#000000',
       killServiceOnDestroy: false,

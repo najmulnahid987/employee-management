@@ -97,6 +97,15 @@ export default function OwnerLiveMapScreen() {
         <View style={styles.summaryBar}>
           <View style={[styles.metricCard, { backgroundColor: theme.surfaceSecondary }]}>
             <ThemedText type="caption" themeColor="textSecondary">
+              ACTIVE
+            </ThemedText>
+            <ThemedText type="headline" style={{ color: Palette.purpleText }}>
+              {summary.activeStandbyCount ?? 0}
+            </ThemedText>
+          </View>
+
+          <View style={[styles.metricCard, { backgroundColor: theme.surfaceSecondary }]}>
+            <ThemedText type="caption" themeColor="textSecondary">
               TRAVELLING
             </ThemedText>
             <ThemedText type="headline" style={{ color: Palette.blueText }}>
@@ -136,6 +145,13 @@ export default function OwnerLiveMapScreen() {
             styles.legendContainer,
             { backgroundColor: theme.surfaceSecondary, borderColor: theme.border },
           ]}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: MAP_STATUS_COLORS.active }]} />
+            <ThemedText type="caption" style={{ fontWeight: '600' }}>
+              Active
+            </ThemedText>
+          </View>
+
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: MAP_STATUS_COLORS.on_the_way }]} />
             <ThemedText type="caption" style={{ fontWeight: '600' }}>
@@ -313,13 +329,40 @@ function LiveWorkerCard({
               {item.workerName}
             </ThemedText>
             <ThemedText type="caption" themeColor="textSecondary">
-              {item.jobService || 'Service Visit'}
+              {item.jobService || (item.isEligibleForLiveMarker ? 'Active Standby' : 'Service Visit')}
             </ThemedText>
           </View>
         </View>
 
         {item.jobStatus ? (
           <StatusBadge status={item.jobStatus} label={statusLabel} size="sm" />
+        ) : item.isEligibleForLiveMarker ? (
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 4,
+              backgroundColor: Palette.purpleBg,
+              borderColor: Palette.purpleBorder,
+              borderWidth: 1,
+              paddingHorizontal: 8,
+              paddingVertical: 2,
+              borderRadius: Radii.pill,
+            }}>
+            <View
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: Palette.purpleText,
+              }}
+            />
+            <ThemedText
+              type="caption"
+              style={{ color: Palette.purpleText, fontWeight: '700', fontSize: 11 }}>
+              ACTIVE
+            </ThemedText>
+          </View>
         ) : null}
       </View>
 

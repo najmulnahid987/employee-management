@@ -1087,4 +1087,113 @@ describe('M12.6 Realtime Owner Live Map Reconciliation & Lifecycle Updates', () 
   });
 });
 
+describe('Worker Standby / Ambient Live Location Sharing Feature', () => {
+  const nowMs = 1700000000000;
+
+  const activeWorker = {
+    id: 'worker-standby-1',
+    full_name: 'Bob Electrician',
+    avatar_url: 'https://example.com/bob.jpg',
+    phone: '+15559876543',
+    is_active: true,
+  };
+
+  test('classifies ambient live location fix (job_id: null, no active job) as LIVE and marker-eligible', () => {
+    const ambientLocation = {
+      id: 'loc-ambient-1',
+      job_id: null,
+      latitude: 37.7654,
+      longitude: -122.4321,
+      accuracy: 8.0,
+      created_at: new Date(nowMs - 15000).toISOString(),
+    };
+
+    const item = buildOwnerLiveMapWorkerItem({
+      worker: activeWorker,
+      job: null,
+      location: ambientLocation,
+      nowMs,
+    });
+
+    assert.equal(item.workerId, 'worker-standby-1');
+    assert.equal(item.workerName, 'Bob Electrician');
+    assert.equal(item.jobId, null);
+    assert.equal(item.positionStatus, 'LIVE');
+    assert.equal(item.isEligibleForLiveMarker, true);
+    assert.equal(item.isLive, true);
+    assert.equal(item.isStale, false);
+    assert.equal(item.workerLatitude, 37.7654);
+    assert.equal(item.workerLongitude, -122.4321);
+    assert.match(item.freshnessLabel, /Active • Updated 15s ago/i);
+  });
+
+  test('classifies ambient live location fix when worker has upcoming scheduled job as Active marker', () => {
+    const upcomingJob = {
+      id: 'job-upcoming-1',
+      service: 'Wiring Panel',
+      address: '777 Market St',
+      status: 'accepted',
+      latitude: 37.78,
+      longitude: -122.41,
+    };
+
+    const ambientLocation = {
+      id: 'loc-ambient-2',
+      job_id: null,
+      latitude: 37.7654,
+      longitude: -122.4321,
+      accuracy: 12.0,
+      created_at: new Date(nowMs - 20000).toISOString(),
+    };
+
+    const item = buildOwnerLiveMapWorkerItem({
+      worker: activeWorker,
+      job: upcomingJob,
+      location: ambientLocation,
+      nowMs,
+    });
+
+    assert.equal(item.positionStatus, 'LIVE');
+    assert.equal(item.isEligibleForLiveMarker, true);
+    assert.equal(item.jobId, 'job-upcoming-1');
+    assert.equal(item.jobStatus, 'accepted');
+    assert.match(item.freshnessLabel, /Active • Updated 20s ago/i);
+  });
+
+  test('provides purple active status color and Active label for map marker dot and legend', () => {
+    assert.equal(MAP_STATUS_COLORS.active, '#8B5CF6');
+    assert.equal(getMapLifecycleStatusLabel('active'), 'Active');
+  });
+
+  test('composeOwnerLiveMapData counts activeStandbyCount in summary and includes active standby in activeMarkers', () => {
+    const roster = [activeWorker];
+    const ambientLocation = [
+      {
+        id: 'loc-amb-1',
+        worker_id: 'worker-standby-1',
+        job_id: null,
+        latitude: 37.76,
+        longitude: -122.43,
+        accuracy: 10.0,
+        created_at: new Date(nowMs - 5000).toISOString(),
+      },
+    ];
+
+    const mapData = composeOwnerLiveMapData({
+      workerProfiles: roster,
+      rawJobs: [],
+      rawLocations: ambientLocation,
+      options: { nowMs },
+    });
+
+    assert.equal(mapData.activeMarkers.length, 1);
+    assert.equal(mapData.activeMarkers[0].workerId, 'worker-standby-1');
+    assert.equal(mapData.summary.activeStandbyCount, 1);
+    assert.equal(mapData.summary.liveTracked, 1);
+    assert.equal(mapData.summary.enRouteCount, 0);
+    assert.equal(mapData.summary.onSiteCount, 0);
+  });
+});
+
+
 

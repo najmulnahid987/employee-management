@@ -319,6 +319,7 @@ export interface OwnerLiveMapWorkerItem {
 export interface OwnerLiveMapSummary {
   totalWorkers: number;
   activeOnDuty: number;     // workers on active visits (on_the_way, arrived, in_progress)
+  activeStandbyCount: number; // workers sharing live location on standby (no active field visit)
   liveTracked: number;      // positionStatus === 'LIVE'
   staleTracked: number;     // positionStatus === 'STALE'
   lowAccuracyCount: number; // positionStatus === 'LOW_ACCURACY'
@@ -356,6 +357,7 @@ export interface BuildWorkerMapItemParams {
   } | null;
   location?: {
     id: string;
+    job_id?: string | null;
     latitude: number;
     longitude: number;
     accuracy: number | null;
@@ -420,6 +422,60 @@ export function buildOwnerLiveMapWorkerItem(
 
   // Idle worker (no active or upcoming job)
   if (!job) {
+    if (location && (location.job_id === null || location.job_id === undefined)) {
+      const coordValidation = validateCoordinates(
+        location.latitude,
+        location.longitude,
+        location.accuracy
+      );
+
+      if (coordValidation.valid) {
+        const isStale = isTelemetryStale(location.created_at, staleThresholdMs, nowMs);
+        const isInaccurate =
+          location.accuracy !== null &&
+          location.accuracy !== undefined &&
+          location.accuracy > maxAccuracyMeters;
+
+        let positionStatus: MapPositionStatus = 'LIVE';
+        let freshnessLabel = `Active • Updated ${formatTimeAgo(location.created_at, nowMs)}`;
+
+        if (isStale) {
+          positionStatus = 'STALE';
+          freshnessLabel = `Active (stale) — updated ${formatTimeAgo(location.created_at, nowMs)}`;
+        } else if (isInaccurate) {
+          positionStatus = 'LOW_ACCURACY';
+          freshnessLabel = `Active (±${Math.round(location.accuracy!)}m) — updated ${formatTimeAgo(location.created_at, nowMs)}`;
+        }
+
+        return {
+          workerId,
+          workerName,
+          workerAvatarUrl,
+          workerPhone,
+          isActive,
+          jobId: null,
+          jobService: null,
+          jobAddress: null,
+          customerName: null,
+          jobStatus: null,
+          destinationLatitude: null,
+          destinationLongitude: null,
+          locationId: location.id,
+          workerLatitude: location.latitude,
+          workerLongitude: location.longitude,
+          accuracy: location.accuracy,
+          recordedAt: location.created_at,
+          positionStatus,
+          isEligibleForLiveMarker: true,
+          isLive: positionStatus === 'LIVE',
+          isStale,
+          isInaccurate,
+          distanceToDestinationMeters: null,
+          freshnessLabel,
+        };
+      }
+    }
+
     return {
       workerId,
       workerName,
@@ -452,8 +508,62 @@ export function buildOwnerLiveMapWorkerItem(
   const isFieldVisit =
     jobStatus === 'on_the_way' || jobStatus === 'arrived' || jobStatus === 'in_progress';
 
-  // Upcoming job (not eligible for GPS tracking per M11 rules)
+  // Upcoming job (not in travel or on-site yet)
   if (!isFieldVisit) {
+    if (location && (location.job_id === null || location.job_id === undefined)) {
+      const coordValidation = validateCoordinates(
+        location.latitude,
+        location.longitude,
+        location.accuracy
+      );
+
+      if (coordValidation.valid) {
+        const isStale = isTelemetryStale(location.created_at, staleThresholdMs, nowMs);
+        const isInaccurate =
+          location.accuracy !== null &&
+          location.accuracy !== undefined &&
+          location.accuracy > maxAccuracyMeters;
+
+        let positionStatus: MapPositionStatus = 'LIVE';
+        let freshnessLabel = `Active • Updated ${formatTimeAgo(location.created_at, nowMs)}`;
+
+        if (isStale) {
+          positionStatus = 'STALE';
+          freshnessLabel = `Active (stale) — updated ${formatTimeAgo(location.created_at, nowMs)}`;
+        } else if (isInaccurate) {
+          positionStatus = 'LOW_ACCURACY';
+          freshnessLabel = `Active (±${Math.round(location.accuracy!)}m) — updated ${formatTimeAgo(location.created_at, nowMs)}`;
+        }
+
+        return {
+          workerId,
+          workerName,
+          workerAvatarUrl,
+          workerPhone,
+          isActive,
+          jobId: job.id,
+          jobService: job.service,
+          jobAddress: job.address,
+          customerName: job.customer_name || null,
+          jobStatus,
+          destinationLatitude: job.latitude,
+          destinationLongitude: job.longitude,
+          locationId: location.id,
+          workerLatitude: location.latitude,
+          workerLongitude: location.longitude,
+          accuracy: location.accuracy,
+          recordedAt: location.created_at,
+          positionStatus,
+          isEligibleForLiveMarker: true,
+          isLive: positionStatus === 'LIVE',
+          isStale,
+          isInaccurate,
+          distanceToDestinationMeters: null,
+          freshnessLabel,
+        };
+      }
+    }
+
     return {
       workerId,
       workerName,
@@ -624,6 +734,7 @@ export function buildOwnerLiveMapData(
   const untrackedWorkers = items.filter((item) => !item.isEligibleForLiveMarker);
 
   let activeOnDuty = 0;
+  let activeStandbyCount = 0;
   let liveTracked = 0;
   let staleTracked = 0;
   let lowAccuracyCount = 0;
@@ -634,6 +745,11 @@ export function buildOwnerLiveMapData(
   let idleCount = 0;
 
   for (const item of items) {
+    const isFieldVisit =
+      item.jobStatus === 'on_the_way' ||
+      item.jobStatus === 'arrived' ||
+      item.jobStatus === 'in_progress';
+
     if (item.jobStatus === 'on_the_way') {
       activeOnDuty++;
       enRouteCount++;
@@ -644,6 +760,10 @@ export function buildOwnerLiveMapData(
       upcomingCount++;
     } else {
       idleCount++;
+    }
+
+    if (item.isEligibleForLiveMarker && !isFieldVisit) {
+      activeStandbyCount++;
     }
 
     if (item.positionStatus === 'LIVE') {
@@ -664,6 +784,7 @@ export function buildOwnerLiveMapData(
     summary: {
       totalWorkers: items.length,
       activeOnDuty,
+      activeStandbyCount,
       liveTracked,
       staleTracked,
       lowAccuracyCount,
@@ -810,6 +931,8 @@ export function composeOwnerLiveMapData(
  */
 export function getMapLifecycleStatusLabel(status: JobStatus | string | null): string {
   switch (status) {
+    case 'active':
+      return 'Active';
     case 'on_the_way':
       return 'Travelling';
     case 'arrived':
@@ -834,11 +957,13 @@ export function getMapLifecycleStatusLabel(status: JobStatus | string | null): s
 /**
  * Restrained accessible status colors for live map markers and legend.
  * Requirement 6:
+ * - Active: Purple (#8B5CF6)
  * - Travelling: Blue (#1D4ED8)
  * - Arrived: Cyan/Teal (#0E7490)
  * - Working: Green (#15803D)
  */
-export const MAP_STATUS_COLORS: Record<'on_the_way' | 'arrived' | 'in_progress', string> = {
+export const MAP_STATUS_COLORS: Record<'on_the_way' | 'arrived' | 'in_progress' | 'active', string> = {
+  active: '#8B5CF6',     // Active Standby (Purple)
   on_the_way: '#1D4ED8', // Travelling
   arrived: '#0E7490',    // Arrived
   in_progress: '#15803D', // Working

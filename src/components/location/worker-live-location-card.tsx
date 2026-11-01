@@ -149,14 +149,10 @@ export function WorkerLiveLocationCard({
           return;
         }
 
-        const activeJobId = jobId;
-        const activeStatus: JobStatus = jobStatus || 'on_the_way';
-
-        if (!activeJobId) {
-          setErrorMessage('No active job selected to share location.');
-          setIsToggling(false);
-          return;
-        }
+        const isFieldVisit =
+          jobStatus === 'on_the_way' || jobStatus === 'arrived' || jobStatus === 'in_progress';
+        const activeJobId = isFieldVisit ? (jobId || null) : null;
+        const activeStatus = isFieldVisit ? (jobStatus as JobStatus) : 'ambient';
 
         // Capture fix
         try {
@@ -221,28 +217,22 @@ export function WorkerLiveLocationCard({
               ? 'Broadcasting live GPS to dispatch & territory map'
               : isEligibleActiveVisit
               ? 'Allow owner to see your location in real time'
-              : jobStatus === 'accepted'
-              ? 'Start travel to begin streaming live location'
-              : jobStatus === 'assigned'
-              ? 'Accept assignment to enable trip tracking'
-              : 'Active during field travel and on-site visits'}
+              : 'Share your live location with owner (standby / available)'}
           </ThemedText>
         </View>
 
-        {isEligibleActiveVisit ? (
-          isToggling ? (
-            <ActivityIndicator size="small" color={theme.primary} />
-          ) : (
-            <Switch
-              value={isSharing}
-              onValueChange={handleToggleSharing}
-              trackColor={{ false: theme.border, true: Palette.greenText }}
-              thumbColor="#FFFFFF"
-              accessibilityRole="switch"
-              accessibilityLabel="Toggle live location sharing"
-            />
-          )
-        ) : null}
+        {isToggling ? (
+          <ActivityIndicator size="small" color={theme.primary} />
+        ) : (
+          <Switch
+            value={isSharing}
+            onValueChange={handleToggleSharing}
+            trackColor={{ false: theme.border, true: Palette.greenText }}
+            thumbColor="#FFFFFF"
+            accessibilityRole="switch"
+            accessibilityLabel="Toggle live location sharing"
+          />
+        )}
       </View>
 
       {/* Action button if job is accepted and ready to travel */}
